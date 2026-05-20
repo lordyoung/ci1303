@@ -15,7 +15,7 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #define USE_CI_D06GT01J_BOARD       0   //CI_D06GT01J,开发板，型号必须为设置1306-仅配置支持双mic 算法+AEC，其他配置不支持
 #define USE_CUS_XXXXXXX_BOARD       0   //用户自定义
 
-#if (USE_CI_D02GS01J_BOARD == 1)
+#if (USE_CI_D02GS01J_BOARD == 1) 
 #define CI_CHIP_TYPE                1302    //flash:2MB,SSOP24
 #define BOARD_PORT_FILE             "CI-D02GS01J.c"
 #elif (USE_CI_D02GS02S_BOARD == 1)
