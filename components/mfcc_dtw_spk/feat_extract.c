@@ -138,13 +138,15 @@ int feat_extract_mfcc(const short *pcm, int n_samples,
         fft_inplace(s_fft_re, s_fft_im, SPK_FFT_N);
 
         /* 3. 功率谱 |X[k]|^2，取 bin 0..256 */
-        float power[SPK_N_FFT_BINS];
+                /* 3. 功率谱 |X[k]|^2，取 bin 0..256 */
+        static float power[SPK_N_FFT_BINS];
         for (int k = 0; k < SPK_N_FFT_BINS; k++) {
             power[k] = s_fft_re[k] * s_fft_re[k] + s_fft_im[k] * s_fft_im[k];
         }
 
         /* 4. Mel 三角滤波器组：26 个能量值 */
-        float mel_energy[SPK_N_MEL];
+                /* 4. Mel 三角滤波器组：26 个能量值 */
+        static float mel_energy[SPK_N_MEL];
         for (int m = 0; m < SPK_N_MEL; m++) {
             int lo  = s_mel_bins[m];
             int mid = s_mel_bins[m + 1];
