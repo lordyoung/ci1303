@@ -34,7 +34,13 @@
 #include "ci_pwk.h"
 #endif
 //#include "asr_pcm_buf.h"
-
+#if USE_MFCC_DTW_SPK
+#include "mfcc_dtw_spk.h"
+/* Ring buffer bounds captured once from the first computevad_callback call */
+static uint32_t s_spk_rb_base   = 0;
+static uint32_t s_spk_rb_end    = 0;
+static int      s_spk_frm_shift = 160;
+#endif
 
 int set_pcm_vad_mark_flag(short *pcm_data,int frame_len)
 {
@@ -168,6 +174,11 @@ int vadstart_callback(unsigned int *pdata, int line)
 #endif
     //ciss_set(CI_SS_VAD_STATE, CI_SS_VAD_START);
     ciss_set(CI_SS_CWSL_OUTPUT_FLAG, 0);     //清除上异常CWSL识别输出标记。
+    #if USE_MFCC_DTW_SPK
+    /* Snapshot ring buffer position at VAD start */
+    spk_ringbuf_snapshot((uint32_t)pdata[0], s_spk_rb_base,
+                          s_spk_rb_end, s_spk_frm_shift);
+    #endif
     return 0;
 }
 
@@ -211,6 +222,17 @@ int vadend_callback(unsigned int *pdata, int line)
 
 int computevad_callback(int asrpcmbuf_addr, int pcm_byte_size, short asrfrmshift, unsigned int asrpcmbuf_start_addr, unsigned int asrpcmbuf_end_addr)
 {
+#if USE_MFCC_DTW_SPK
+    /* Latch ring buffer layout on first call — values are constant */
+    if (s_spk_rb_base == 0 && asrpcmbuf_start_addr != 0) {
+        s_spk_rb_base   = (uint32_t)asrpcmbuf_start_addr;
+        s_spk_rb_end    = (uint32_t)asrpcmbuf_end_addr;
+        s_spk_frm_shift = (int)asrfrmshift;
+        mprintf("[SPK] rb latched base=0x%x end=0x%x frm_shift=%d\n",
+                (unsigned)s_spk_rb_base, (unsigned)s_spk_rb_end, s_spk_frm_shift);
+    }
+#endif
+    (void)asrpcmbuf_addr; (void)pcm_byte_size;
     return 0;
 }
 

@@ -178,6 +178,10 @@ int asr_result_callback(callback_asr_result_type_t *asr)
         #if (MULT_INTENT < 2)
         mprintf("send result:%s %d\n", asr->cmd_word, asr->confidence);
         #if USE_MFCC_DTW_SPK
+        if (asr->frm > 0)
+            spk_process(asr->frm);
+        #endif
+        #if USE_MFCC_DTW_SPK
         {
             int spk_start = asr->voice_start_frame;
             int spk_len   = asr->vocie_valid_frame_len;

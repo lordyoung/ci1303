@@ -1,77 +1,74 @@
-#include <string.h>
+#include <stdint.h>
+
 #include "spk_template_store.h"
-#include "user_config.h"
 #include "ci_nvdata_manage.h"
+#include "user_config.h"
 #include "ci_log.h"
+
+#define TPL_MAGIC  0x53504B31u   /* 'SPK1' */
 
 typedef struct {
     uint32_t magic;
     int32_t  n_frames;
-} spk_template_meta_t;
+} tpl_meta_t;
 
-int spk_template_load(float feat[][SPK_FEAT_DIM], int *n_frames)
+static void nv_write_safe(uint32_t id, uint16_t len, void *buf)
 {
-    spk_template_meta_t meta;
-    uint16_t real_len = 0;
-    cinv_item_ret_t ret;
-
-    ret = cinv_item_read(NVDATA_ID_SPK_TEMPLATE_META, sizeof(meta), &meta, &real_len);
-    if (ret != CINV_OPER_SUCCESS || meta.magic != SPK_TEMPLATE_MAGIC) {
-        mprintf("[SPK] No template in Flash (meta ret=%d)\n", (int)ret);
-        return -1;
+    cinv_item_ret_t r = cinv_item_write(id, len, buf);
+    if (r != CINV_OPER_SUCCESS) {
+        cinv_item_delete(id);
+        cinv_item_init(id, len, buf);
+        cinv_item_write(id, len, buf);
     }
-    if (meta.n_frames <= 0 || meta.n_frames > SPK_MAX_TEMPLATE_FRAMES) {
-        mprintf("[SPK] Template meta n_frames=%d out of range\n", (int)meta.n_frames);
-        return -1;
-    }
+}
 
-    uint16_t data_size = (uint16_t)((size_t)meta.n_frames * SPK_FEAT_DIM * sizeof(float));
-    ret = cinv_item_read(NVDATA_ID_SPK_TEMPLATE, data_size, feat, &real_len);
-    if (ret != CINV_OPER_SUCCESS || real_len != data_size) {
-        mprintf("[SPK] Template data read failed ret=%d\n", (int)ret);
-        return -1;
-    }
+int spk_tpl_save(const float feats[][SPK_FEAT_DIM], int n_frames)
+{
+    tpl_meta_t meta   = { TPL_MAGIC, (int32_t)n_frames };
+    uint16_t   dlen   = (uint16_t)(n_frames * SPK_FEAT_DIM * sizeof(float));
 
-    *n_frames = (int)meta.n_frames;
-    mprintf("[SPK] Template loaded: %d frames\n", *n_frames);
+    nv_write_safe(NVDATA_ID_SPK_TEMPLATE_META, sizeof(meta), &meta);
+    nv_write_safe(NVDATA_ID_SPK_TEMPLATE,      dlen,         (void *)feats);
+
+    mprintf("[SPK] tpl saved: %d frames (%d bytes)\n", n_frames, (int)dlen);
     return 0;
 }
 
-int spk_template_save(const float feat[][SPK_FEAT_DIM], int n_frames)
+int spk_tpl_load(float feats[][SPK_FEAT_DIM], int *n_frames_out)
 {
-    spk_template_meta_t meta;
-    meta.magic    = SPK_TEMPLATE_MAGIC;
-    meta.n_frames = (int32_t)n_frames;
+    tpl_meta_t meta;
+    uint16_t   rlen = 0;
 
-    uint16_t data_size = (uint16_t)((size_t)n_frames * SPK_FEAT_DIM * sizeof(float));
-    cinv_item_ret_t ret;
+    if (cinv_item_read(NVDATA_ID_SPK_TEMPLATE_META, sizeof(meta), &meta, &rlen)
+            != CINV_OPER_SUCCESS)
+        return -1;
+    if (meta.magic != TPL_MAGIC || meta.n_frames <= 0)
+        return -1;
 
-    ret = cinv_item_write(NVDATA_ID_SPK_TEMPLATE, data_size, (void *)feat);
-    if (ret != CINV_OPER_SUCCESS) {
-        ret = cinv_item_init(NVDATA_ID_SPK_TEMPLATE, data_size, (void *)feat);
-        if (ret != CINV_OPER_SUCCESS) {
-            mprintf("[SPK] Template data write failed ret=%d\n", (int)ret);
-            return -1;
-        }
-    }
+    int n = (meta.n_frames <= SPK_MAX_TEMPLATE_FRAMES)
+            ? meta.n_frames : SPK_MAX_TEMPLATE_FRAMES;
+    uint16_t dlen = (uint16_t)(n * SPK_FEAT_DIM * sizeof(float));
 
-    ret = cinv_item_write(NVDATA_ID_SPK_TEMPLATE_META, sizeof(meta), &meta);
-    if (ret != CINV_OPER_SUCCESS) {
-        ret = cinv_item_init(NVDATA_ID_SPK_TEMPLATE_META, sizeof(meta), &meta);
-        if (ret != CINV_OPER_SUCCESS) {
-            mprintf("[SPK] Template meta write failed ret=%d\n", (int)ret);
-            return -1;
-        }
-    }
+    if (cinv_item_read(NVDATA_ID_SPK_TEMPLATE, dlen, feats, &rlen)
+            != CINV_OPER_SUCCESS)
+        return -1;
 
-    mprintf("[SPK] Template saved: %d frames\n", n_frames);
+    *n_frames_out = n;
     return 0;
 }
 
-int spk_template_delete(void)
+int spk_tpl_exists(void)
 {
-    cinv_item_ret_t r1 = cinv_item_delete(NVDATA_ID_SPK_TEMPLATE_META);
-    cinv_item_ret_t r2 = cinv_item_delete(NVDATA_ID_SPK_TEMPLATE);
-    mprintf("[SPK] Template deleted (r1=%d r2=%d)\n", (int)r1, (int)r2);
-    return (r1 == CINV_OPER_SUCCESS && r2 == CINV_OPER_SUCCESS) ? 0 : -1;
+    tpl_meta_t meta;
+    uint16_t   rlen = 0;
+    cinv_item_ret_t r = cinv_item_read(NVDATA_ID_SPK_TEMPLATE_META,
+                                       sizeof(meta), &meta, &rlen);
+    return (r == CINV_OPER_SUCCESS && meta.magic == TPL_MAGIC && meta.n_frames > 0);
+}
+
+int spk_tpl_delete(void)
+{
+    cinv_item_delete(NVDATA_ID_SPK_TEMPLATE_META);
+    cinv_item_delete(NVDATA_ID_SPK_TEMPLATE);
+    return 0;
 }

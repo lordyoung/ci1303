@@ -217,21 +217,6 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #endif
 #endif
 
-#define USE_MFCC_DTW_SPK              1
-/* ===== MFCC+DTW Speaker Recognition ===== */
-#define USE_MFCC_DTW_SPK            1           /* 1=enable, 0=disable */
-#define SPK_ENROLL_TIMES            3           /* number of enrollment utterances */
-#define SPK_DTW_THRESHOLD_X1000     650         /* DTW accept threshold * 1000 */
-#define SPK_DTW_BAND_RATIO_X100     20          /* Sakoe-Chiba band % */
-#define SPK_PCM_BUF_SIZE            (32*1024)   /* max PCM copy buffer, bytes */
-#define SPK_MAX_TEMPLATE_FRAMES     80          /* max feature frames per utterance; NV limit: 80*39*4=12480B < 16KB */
-#define SPK_DEBUG                   1
-
-#define NVDATA_ID_SPK_BASE          0x60100000
-#define NVDATA_ID_SPK_TEMPLATE      (NVDATA_ID_SPK_BASE + 0)
-#define NVDATA_ID_SPK_TEMPLATE_META (NVDATA_ID_SPK_BASE + 1)
-#define NVDATA_ID_SPK_THRESHOLD     (NVDATA_ID_SPK_BASE + 2)
-/* ===== end MFCC+DTW ===== */
 
 #if USE_SED_CRY || USE_SED_SNORE
 #define NO_ASR_FLOW                     1         //不可修改
@@ -421,13 +406,16 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 // 切换播报提示id与唤醒网络序号的偏移量
 #define  PLAY_ID_OFFSET_SWITCH 0
 
-/* === SPK 模块功能开关与参数 === */
+/* ── MFCC+DTW speaker recognition ─────────────────────────────────────────── */
 #define USE_MFCC_DTW_SPK            1
-#define SPK_ENROLL_TIMES            3       /* 注册时录音次数 */
-#define SPK_DTW_THRESHOLD_X1000     650     /* DTW 距离阈值×1000，M4 现场调参 */
-#define SPK_DTW_BAND_RATIO_X100     20      /* Sakoe-Chiba 带宽×100 (20%) */
-#define SPK_PCM_BUF_SIZE            (32*1024) /* SPK 内部 PCM 副本缓冲 */
-#define SPK_MAX_TEMPLATE_FRAMES     150     /* 单模板最大帧数 (~2.4 秒) */
-#define SPK_DEBUG                   1       /* 调试打印开关，M4 之后关 */
-
+#define SPK_ENROLL_TIMES            3
+#define SPK_DTW_THRESHOLD_X1000     650
+#define SPK_DTW_BAND_RATIO_X100     20
+#define SPK_PCM_BUF_SIZE            (32*1024)
+#define SPK_MAX_TEMPLATE_FRAMES     80
+#define SPK_DEBUG                   1
+#define NVDATA_ID_SPK_BASE          0x60100000u
+#define NVDATA_ID_SPK_TEMPLATE      (NVDATA_ID_SPK_BASE + 0u)
+#define NVDATA_ID_SPK_TEMPLATE_META (NVDATA_ID_SPK_BASE + 1u)
+#define NVDATA_ID_SPK_THRESHOLD     (NVDATA_ID_SPK_BASE + 2u)
 #endif /* _USER_CONFIG_H_ */

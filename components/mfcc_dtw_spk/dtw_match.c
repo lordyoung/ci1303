@@ -1,58 +1,68 @@
 #include <math.h>
-#include <float.h>
+#include <string.h>
 #include "dtw_match.h"
 #include "user_config.h"
 
-static float s_row_prev[SPK_MAX_TEMPLATE_FRAMES];
-static float s_row_curr[SPK_MAX_TEMPLATE_FRAMES];
+/* Rolling two-row DP buffers — static to avoid stack overflow */
+static float s_prev[SPK_MAX_TEMPLATE_FRAMES];
+static float s_curr[SPK_MAX_TEMPLATE_FRAMES];
 
 static float cosine_dist(const float *a, const float *b, int dim)
 {
     float dot = 0.0f, na = 0.0f, nb = 0.0f;
-    for (int k = 0; k < dim; k++) {
-        dot += a[k] * b[k];
-        na  += a[k] * a[k];
-        nb  += b[k] * b[k];
+    for (int i = 0; i < dim; i++) {
+        dot += a[i] * b[i];
+        na  += a[i] * a[i];
+        nb  += b[i] * b[i];
     }
     float denom = sqrtf(na) * sqrtf(nb);
-    if (denom < 1e-10f) return 1.0f;
-    float cos_sim = dot / denom;
-    if (cos_sim >  1.0f) cos_sim =  1.0f;
-    if (cos_sim < -1.0f) cos_sim = -1.0f;
-    return 1.0f - cos_sim;
+    if (denom < 1e-8f) return 1.0f;
+    float cosv = dot / denom;
+    if (cosv >  1.0f) cosv =  1.0f;
+    if (cosv < -1.0f) cosv = -1.0f;
+    return 1.0f - cosv;
 }
 
-float dtw_distance(const float a[][SPK_FEAT_DIM], int la,
-                   const float b[][SPK_FEAT_DIM], int lb,
-                   int band_ratio_x100)
+int dtw_match(const float *query, int lq,
+              const float *ref,   int lr,
+              int dim, int band_pct)
 {
-    if (la <= 0 || lb <= 0) return FLT_MAX;
+    if (lq <= 0 || lr <= 0 ||
+        lq > SPK_MAX_TEMPLATE_FRAMES ||
+        lr > SPK_MAX_TEMPLATE_FRAMES) return -1;
 
-    int max_len = (la > lb) ? la : lb;
-    int R = max_len * band_ratio_x100 / 100;
-    if (R < 1) R = 1;
+    int band = (lr * band_pct + 50) / 100;
+    if (band < 2) band = 2;
 
-    for (int j = 0; j < lb; j++) s_row_prev[j] = FLT_MAX;
-    s_row_prev[0] = cosine_dist(a[0], b[0], SPK_FEAT_DIM);
+    const float INF = 1e9f;
 
-    for (int i = 1; i < la; i++) {
-        for (int j = 0; j < lb; j++) s_row_curr[j] = FLT_MAX;
-
-        int j_lo = i - R; if (j_lo < 0)  j_lo = 0;
-        int j_hi = i + R; if (j_hi >= lb) j_hi = lb - 1;
-
-        for (int j = j_lo; j <= j_hi; j++) {
-            float d = cosine_dist(a[i], b[j], SPK_FEAT_DIM);
-            float best = s_row_prev[j];
-            if (j > 0 && s_row_curr[j-1] < best) best = s_row_curr[j-1];
-            if (j > 0 && s_row_prev[j-1] < best) best = s_row_prev[j-1];
-            s_row_curr[j] = d + (best == FLT_MAX ? FLT_MAX : best);
-        }
-
-        for (int j = 0; j < lb; j++) s_row_prev[j] = s_row_curr[j];
+    /* Initialize first query row */
+    for (int j = 0; j < lr; j++) s_prev[j] = INF;
+    s_prev[0] = cosine_dist(query, ref, dim);
+    for (int j = 1; j < lr && j <= band; j++) {
+        float cost = cosine_dist(query, ref + j * dim, dim);
+        s_prev[j]  = s_prev[j - 1] + cost;
     }
 
-    float total = s_row_prev[lb - 1];
-    if (total == FLT_MAX) return FLT_MAX;
-    return total / (float)(la + lb);
+    /* Fill remaining rows */
+    for (int i = 1; i < lq; i++) {
+        const float *qi = query + i * dim;
+        for (int j = 0; j < lr; j++) s_curr[j] = INF;
+
+        int j_lo = i - band; if (j_lo < 0) j_lo = 0;
+        int j_hi = i + band; if (j_hi >= lr) j_hi = lr - 1;
+
+        for (int j = j_lo; j <= j_hi; j++) {
+            float cost = cosine_dist(qi, ref + j * dim, dim);
+            float best = s_prev[j];
+            if (j > 0 && s_prev[j - 1] < best) best = s_prev[j - 1];
+            if (j > 0 && s_curr[j - 1] < best) best = s_curr[j - 1];
+            s_curr[j] = best + cost;
+        }
+        memcpy(s_prev, s_curr, (size_t)(lr * sizeof(float)));
+    }
+
+    float dist = s_prev[lr - 1];
+    if (dist >= 1e8f) return -1;
+    return (int)(dist / (float)(lq + lr) * 1000.0f);
 }

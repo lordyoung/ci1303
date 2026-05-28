@@ -260,6 +260,31 @@ OBJS += build/objs/asr_process_callback.o
 build/objs/asr_process_callback.o : $(SDK_PATH)/components/asr/asr_process_callback.c
 	$(CC_PREFIX)$(CC) $(C_FLAGS) -c -o "$@" "$<"
 
+OBJS += build/objs/mfcc_dtw_spk.o
+-include build/objs/mfcc_dtw_spk.d
+build/objs/mfcc_dtw_spk.o : $(SDK_PATH)/components/mfcc_dtw_spk/mfcc_dtw_spk.c
+	$(CC_PREFIX)$(CC) $(C_FLAGS) -c -o "$@" "$<"
+
+OBJS += build/objs/feat_extract.o
+-include build/objs/feat_extract.d
+build/objs/feat_extract.o : $(SDK_PATH)/components/mfcc_dtw_spk/feat_extract.c
+	$(CC_PREFIX)$(CC) $(C_FLAGS) -c -o "$@" "$<"
+
+OBJS += build/objs/feat_postproc.o
+-include build/objs/feat_postproc.d
+build/objs/feat_postproc.o : $(SDK_PATH)/components/mfcc_dtw_spk/feat_postproc.c
+	$(CC_PREFIX)$(CC) $(C_FLAGS) -c -o "$@" "$<"
+
+OBJS += build/objs/dtw_match.o
+-include build/objs/dtw_match.d
+build/objs/dtw_match.o : $(SDK_PATH)/components/mfcc_dtw_spk/dtw_match.c
+	$(CC_PREFIX)$(CC) $(C_FLAGS) -c -o "$@" "$<"
+
+OBJS += build/objs/spk_template_store.o
+-include build/objs/spk_template_store.d
+build/objs/spk_template_store.o : $(SDK_PATH)/components/mfcc_dtw_spk/spk_template_store.c
+	$(CC_PREFIX)$(CC) $(C_FLAGS) -c -o "$@" "$<"
+
 OBJS += build/objs/codec_manager.o
 -include build/objs/codec_manager.d
 build/objs/codec_manager.o : $(SDK_PATH)/components/codec_manager/codec_manager.c
@@ -609,6 +634,7 @@ C_FLAGS += -I$(SDK_PATH)/components/alg/vp_host
 C_FLAGS += -I$(SDK_PATH)/components/VPR
 C_FLAGS += -I$(SDK_PATH)/components/alg/ai_denoise
 C_FLAGS += -I$(SDK_PATH)/components/asr
+C_FLAGS += -I$(SDK_PATH)/components/mfcc_dtw_spk
 C_FLAGS += -I$(SDK_PATH)/components/asr/asr_top
 C_FLAGS += -I$(SDK_PATH)/components/asr/asr_top/asr_top_inc
 C_FLAGS += -I$(SDK_PATH)/components/asr/decoder_v2/decoder_inc

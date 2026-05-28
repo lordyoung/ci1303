@@ -53,7 +53,32 @@
 #include "ci_nlp_user.h"
 #include "ci_nlp.h"
 #include "cias_record_demo.h"
+#if USE_MFCC_DTW_SPK
 #include "mfcc_dtw_spk.h"
+
+static void spk_enroll_callback(spk_enroll_state_t state, int cur, int total)
+{
+    if (state == SPK_ENROLL_STATE_RECORDING)
+        mprintf("[SPK] enrolled %d/%d - say cmd word again\n", cur, total);
+    else if (state == SPK_ENROLL_STATE_DONE)
+        mprintf("[SPK] enrollment complete!\n");
+    else
+        mprintf("[SPK] enrollment failed\n");
+}
+
+static void spk_verify_callback(spk_result_t result, int dist)
+{
+    mprintf("[SPK] result=%d dist*1000=%d\n", (int)result, dist);
+    if (result == SPK_RESULT_ACCEPT) {
+        mprintf("[SPK] ACCEPT - owner confirmed\n");
+    } else if (result == SPK_RESULT_REJECT) {
+        mprintf("[SPK] REJECT - not owner\n");
+    } else if (result == SPK_RESULT_NO_TEMPLATE) {
+        mprintf("[SPK] no template - starting enrollment\n");
+        spk_start_enroll(spk_enroll_callback);
+    }
+}
+#endif
 /**
  * @brief 硬件初始化
  *          这个函数主要用于系统上电后初始化硬件寄存器到初始值，配置中断向量表初始化芯片io配置时钟
@@ -212,20 +237,6 @@ static int alg_cloud_protocol_init(void)
 }
 #endif
 
-/* SPK 验证结果回调 —— M1 阶段仅打印，M4 加开门 GPIO */
-static void spk_verify_callback(spk_result_t result, int dtw_dist_x1000)
-{
-    if (result == SPK_RESULT_ACCEPT) {
-        mprintf("[SPK CB] ACCEPT dist=%d -> open door\n", dtw_dist_x1000);
-        /* TODO: trigger GPIO / TTS / door open logic here */
-    } else if (result == SPK_RESULT_REJECT) {
-        mprintf("[SPK CB] REJECT dist=%d\n", dtw_dist_x1000);
-    } else if (result == SPK_RESULT_NO_TEMPLATE) {
-        mprintf("[SPK CB] NO TEMPLATE\n");
-    } else {
-        mprintf("[SPK CB] ERROR\n");
-    }
-}
 static void task_init(void *p_arg)
 {
 	#if USE_BLE

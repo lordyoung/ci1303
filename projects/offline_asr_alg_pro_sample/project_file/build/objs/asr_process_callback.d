@@ -14,7 +14,8 @@ build/objs/asr_process_callback.o: \
  ../../../components/log/ci_log.h ../../../components/log/ci_log_config.h \
  ../../../components/log/ci_assert.h ../../../components/log/ci_log.h \
  ../../../components/assist/ci_debug_config.h \
- ../../../components/status_share/status_share.h
+ ../../../components/status_share/status_share.h \
+ ../../../components/mfcc_dtw_spk/mfcc_dtw_spk.h
 
 ../../../system/sdk_default_config.h:
 
@@ -51,3 +52,5 @@ build/objs/asr_process_callback.o: \
 ../../../components/assist/ci_debug_config.h:
 
 ../../../components/status_share/status_share.h:
+
+../../../components/mfcc_dtw_spk/mfcc_dtw_spk.h:

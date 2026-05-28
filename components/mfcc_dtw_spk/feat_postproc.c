@@ -1,63 +1,46 @@
-#include <string.h>
 #include "feat_postproc.h"
+#include "user_config.h"
 
-static float s_delta_buf[SPK_MAX_TEMPLATE_FRAMES][SPK_N_MFCC_BASE];
+/* Intermediate buffer for Δ — static to avoid stack overflow */
+static float s_d1[SPK_MAX_TEMPLATE_FRAMES][SPK_N_MFCC_BASE];
 
-static int safe_frame(int t, int n) {
-    if (t < 0)  return 0;
-    if (t >= n) return n - 1;
-    return t;
-}
-
-static void compute_delta(const float src[][SPK_N_MFCC_BASE], int n_frames,
-                           float dst[][SPK_N_MFCC_BASE])
+void feat_apply_cmn(float feats[][SPK_N_MFCC_BASE], int n_frames)
 {
-    for (int t = 0; t < n_frames; t++) {
-        for (int k = 0; k < SPK_N_MFCC_BASE; k++) {
-            float d =
-                1.0f * (src[safe_frame(t+1, n_frames)][k] - src[safe_frame(t-1, n_frames)][k])
-              + 2.0f * (src[safe_frame(t+2, n_frames)][k] - src[safe_frame(t-2, n_frames)][k]);
-            dst[t][k] = d / 10.0f;
-        }
+    for (int d = 0; d < SPK_N_MFCC_BASE; d++) {
+        float mean = 0.0f;
+        for (int t = 0; t < n_frames; t++) mean += feats[t][d];
+        mean /= (float)n_frames;
+        for (int t = 0; t < n_frames; t++) feats[t][d] -= mean;
     }
 }
 
-void feat_apply_cmn(float mfcc[][SPK_N_MFCC_BASE], int n_frames)
+/* D=2 central difference for sequence f[0..n-1] at time t, dim d */
+static float central_diff(const float (*f)[SPK_N_MFCC_BASE], int t, int n, int d)
 {
-    if (n_frames <= 0) return;
-    for (int k = 0; k < SPK_N_MFCC_BASE; k++) {
-        float sum = 0.0f;
-        for (int t = 0; t < n_frames; t++) sum += mfcc[t][k];
-        float mean = sum / n_frames;
-        for (int t = 0; t < n_frames; t++) mfcc[t][k] -= mean;
-    }
+    int t1p = (t + 1 < n) ? t + 1 : n - 1;
+    int t1m = (t - 1 >= 0) ? t - 1 : 0;
+    int t2p = (t + 2 < n) ? t + 2 : n - 1;
+    int t2m = (t - 2 >= 0) ? t - 2 : 0;
+    return (f[t1p][d] - f[t1m][d] + 2.0f * (f[t2p][d] - f[t2m][d])) / 10.0f;
 }
 
-int feat_pack_with_delta(const float mfcc[][SPK_N_MFCC_BASE], int n_frames,
-                         float feat_out[][SPK_FEAT_DIM])
+void feat_pack_with_delta(const float mfcc[][SPK_N_MFCC_BASE], int n_frames,
+                          float out[][SPK_FEAT_DIM])
 {
-    if (n_frames <= 0 || n_frames > SPK_MAX_TEMPLATE_FRAMES) return 0;
+    int cap = (n_frames < SPK_MAX_TEMPLATE_FRAMES) ? n_frames : SPK_MAX_TEMPLATE_FRAMES;
 
-    compute_delta(mfcc, n_frames, s_delta_buf);
+    /* Compute first-order delta into s_d1 */
+    for (int t = 0; t < cap; t++)
+        for (int d = 0; d < SPK_N_MFCC_BASE; d++)
+            s_d1[t][d] = central_diff(mfcc, t, cap, d);
 
-    for (int t = 0; t < n_frames; t++) {
-        for (int k = 0; k < SPK_N_MFCC_BASE; k++) {
-            feat_out[t][k] = mfcc[t][k];
-        }
-        for (int k = 0; k < SPK_N_MFCC_BASE; k++) {
-            feat_out[t][SPK_N_MFCC_BASE + k] = s_delta_buf[t][k];
-        }
+    /* Pack [mfcc | Δ | ΔΔ] */
+    for (int t = 0; t < cap; t++) {
+        for (int d = 0; d < SPK_N_MFCC_BASE; d++)
+            out[t][d] = mfcc[t][d];
+        for (int d = 0; d < SPK_N_MFCC_BASE; d++)
+            out[t][SPK_N_MFCC_BASE + d] = s_d1[t][d];
+        for (int d = 0; d < SPK_N_MFCC_BASE; d++)
+            out[t][2 * SPK_N_MFCC_BASE + d] = central_diff(s_d1, t, cap, d);
     }
-
-    float (*delta_ptr)[SPK_N_MFCC_BASE] = s_delta_buf;
-    for (int t = 0; t < n_frames; t++) {
-        for (int k = 0; k < SPK_N_MFCC_BASE; k++) {
-            float d =
-                1.0f * (delta_ptr[safe_frame(t+1, n_frames)][k] - delta_ptr[safe_frame(t-1, n_frames)][k])
-              + 2.0f * (delta_ptr[safe_frame(t+2, n_frames)][k] - delta_ptr[safe_frame(t-2, n_frames)][k]);
-            feat_out[t][2 * SPK_N_MFCC_BASE + k] = d / 10.0f;
-        }
-    }
-
-    return n_frames;
 }

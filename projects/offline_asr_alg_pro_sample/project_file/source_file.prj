@@ -83,6 +83,11 @@ source-file: components/audio_in_manage/audio_in_manage_inner.c
 source-file: components/asr/asr_malloc_port.c
 source-file: components/asr/asr_process_callback_decoder.c
 source-file: components/asr/asr_process_callback.c
+source-file: components/mfcc_dtw_spk/mfcc_dtw_spk.c
+source-file: components/mfcc_dtw_spk/feat_extract.c
+source-file: components/mfcc_dtw_spk/feat_postproc.c
+source-file: components/mfcc_dtw_spk/dtw_match.c
+source-file: components/mfcc_dtw_spk/spk_template_store.c
 source-file: components/codec_manager/codec_manager.c
 source-file: components/codec_manager/codec_manage_inner_port.c
 
@@ -215,6 +220,7 @@ include-path: components/alg/vp_host
 include-path: components/VPR
 include-path: components/alg/ai_denoise
 include-path: components/asr
+include-path: components/mfcc_dtw_spk
 include-path: components/asr/asr_top
 include-path: components/asr/asr_top/asr_top_inc
 include-path: components/asr/decoder_v2/decoder_inc
