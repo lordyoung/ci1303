@@ -13,7 +13,7 @@
   */
 #include <stdlib.h>
 #include <stdio.h>
-
+#include "mfcc_dtw_spk.h"
 #include "sdk_default_config.h"
 #include "platform_config.h"
 #include "ci_log_config.h"
@@ -91,6 +91,16 @@ int asr_result_callback(callback_asr_result_type_t *asr)
     #if USE_VPR || USE_WMAN_VPR
     extern void get_asr_start_end_frm(int start,int valid);
     get_asr_start_end_frm(asr->voice_start_frame,asr->vocie_valid_frame_len);
+        /* === 新增：MFCC+DTW 说话人验证 === */
+    #if USE_MFCC_DTW_SPK
+    if (asr->cmd_handle != (cmd_handle_t)INVALID_HANDLE
+        && asr->vocie_valid_frame_len > 0) {
+        spk_verify(asr->asrvoice_ptr,
+                   asr->voice_start_frame,
+                   asr->vocie_valid_frame_len);
+    }
+    #endif
+    /* === 新增结束 === */
     #endif
 #if (!DEBUG_ASR_NOT_PLAY)
     if (INVALID_HANDLE != asr->cmd_handle)

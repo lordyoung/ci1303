@@ -209,7 +209,16 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #define VPT_SIZE                        (192*sizeof(float))   //模板大小  -不可修改
 #define NVDATA_ID_VP_NUMBER             0xA0000001      //存储模板数量NV基地址 -不可修改
 #define NVDATA_ID_VP_INFO               0xA0000002      //存储模板ID NV基地址，每个用户模版数是重复录入次数-不可修改
-           
+//输出给用户的id就是（地址-0xA0000002/VP_REC_TIMES 
+#define NVDATA_ID_VP_MODE               0xA0000003      //存储模板NV基地址 -不可修改
+#if (MAX_VP_TEMPLATE_NUM > 4)
+#error "The vpr template num max 4
+"
+#endif
+#endif /* USE_VPR */
+
+#define USE_MFCC_DTW_SPK              1
+#if USE_MFCC_DTW_SPK
 /* === SPK (MFCC+DTW Speaker Recognition) NVDATA ID 分配
  *   位于用户区 0x60000001 ~ 0xF0000000 内
  *   远离 VPR 集群 (0xA00000xx) 和 USER_WAKEUP_NET (0x60000004)
@@ -220,11 +229,7 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #define NVDATA_ID_SPK_TEMPLATE_META     (NVDATA_ID_SPK_BASE + 1)
 #define NVDATA_ID_SPK_THRESHOLD         (NVDATA_ID_SPK_BASE + 2)
 /* 0x60100003 ~ 0x60100007 预留扩展 */
-//输出给用户的id就是（地址-0xA0000002/VP_REC_TIMES 
-#define NVDATA_ID_VP_MODE               0xA0000003      //存储模板NV基地址 -不可修改
-#if (MAX_VP_TEMPLATE_NUM > 4)
-#error "The vpr template num max 4\n"
-#endif
+
 #endif
 
 #if USE_SED_CRY || USE_SED_SNORE
