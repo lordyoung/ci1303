@@ -1,48 +1,26 @@
-/**
- * @file feat_extract.c
- * @brief MFCC feature extraction: pre-emphasis -> Hamming -> FFT -> Mel -> log -> DCT
- *        16kHz, 512-point FFT, 26 Mel filters, 13 MFCC coefficients (C1..C13)
- */
 #include <math.h>
 #include <string.h>
 #include "feat_extract.h"
-#include "user_config.h"
 
-/* ========== 内部常量 ========== */
-#define F_LOW       80.0f
-#define F_HIGH      8000.0f
-#define SR          16000
-#define PRE_EMPH    0.97f
-#define PI          3.14159265f
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
 
-/* ========== 静态预计算表（仅初始化一次）========== */
-static int   s_init_done;
-static float s_hamming[SPK_FRAME_LEN];                  /* 2 KB */
-static int   s_mel_bins[SPK_N_MEL + 2];                 /* 28 个 bin 边界 */
-static float s_dct_cos[SPK_N_MFCC_BASE][SPK_N_MEL];     /* 13×26 = 1.4 KB */
+static float s_hamming[SPK_FRAME_LEN];
+static int   s_mel_bins[SPK_N_MEL + 2];
+static float s_dct_cos[SPK_N_MFCC_BASE][SPK_N_MEL];
 
-/* FFT 工作缓冲（逐帧复用，不与外部数据重叠）*/
-static float s_fft_re[SPK_FFT_N];                       /* 2 KB */
-static float s_fft_im[SPK_FFT_N];                       /* 2 KB */
+static float s_fft_re[SPK_FFT_N];
+static float s_fft_im[SPK_FFT_N];
 
-/* ========== 内部工具函数 ========== */
+static float hz_to_mel(float hz) { return 2595.0f * log10f(1.0f + hz / 700.0f); }
+static float mel_to_hz(float mel) { return 700.0f * (powf(10.0f, mel / 2595.0f) - 1.0f); }
 
-static float hz_to_mel(float hz)
+static void fft_radix2(float *re, float *im, int n)
 {
-    return 2595.0f * log10f(1.0f + hz / 700.0f);
-}
-
-static float mel_to_hz(float mel)
-{
-    return 700.0f * (powf(10.0f, mel / 2595.0f) - 1.0f);
-}
-
-/* 原地 Cooley-Tukey 基-2 DIT FFT，N 必须是 2 的幂 */
-static void fft_inplace(float *re, float *im, int N)
-{
-    /* 位逆序置换 */
-    for (int i = 1, j = 0; i < N; i++) {
-        int bit = N >> 1;
+    int j = 0;
+    for (int i = 1; i < n; i++) {
+        int bit = n >> 1;
         for (; j & bit; bit >>= 1) j ^= bit;
         j ^= bit;
         if (i < j) {
@@ -51,137 +29,100 @@ static void fft_inplace(float *re, float *im, int N)
             t = im[i]; im[i] = im[j]; im[j] = t;
         }
     }
-    /* 蝶形运算 */
-    for (int len = 2; len <= N; len <<= 1) {
-        float ang = -PI / (float)(len >> 1);
-        float wR = cosf(ang), wI = sinf(ang);
-        for (int i = 0; i < N; i += len) {
-            float curR = 1.0f, curI = 0.0f;
-            for (int k = 0; k < (len >> 1); k++) {
-                float uR = re[i + k];
-                float uI = im[i + k];
-                float vR = re[i + k + (len >> 1)] * curR - im[i + k + (len >> 1)] * curI;
-                float vI = re[i + k + (len >> 1)] * curI + im[i + k + (len >> 1)] * curR;
-                re[i + k]            = uR + vR;
-                im[i + k]            = uI + vI;
-                re[i + k + (len>>1)] = uR - vR;
-                im[i + k + (len>>1)] = uI - vI;
-                float nR = curR * wR - curI * wI;
-                curI     = curR * wI + curI * wR;
-                curR     = nR;
+    for (int len = 2; len <= n; len <<= 1) {
+        float ang = -2.0f * (float)M_PI / (float)len;
+        float wr0 = cosf(ang), wi0 = sinf(ang);
+        for (int i = 0; i < n; i += len) {
+            float wr = 1.0f, wi = 0.0f;
+            for (int k = 0; k < len / 2; k++) {
+                float ur = re[i+k],          ui = im[i+k];
+                float vr = re[i+k+len/2]*wr - im[i+k+len/2]*wi;
+                float vi = re[i+k+len/2]*wi + im[i+k+len/2]*wr;
+                re[i+k]         = ur + vr;
+                im[i+k]         = ui + vi;
+                re[i+k+len/2]   = ur - vr;
+                im[i+k+len/2]   = ui - vi;
+                float nwr = wr*wr0 - wi*wi0;
+                float nwi = wr*wi0 + wi*wr0;
+                wr = nwr; wi = nwi;
             }
         }
     }
 }
 
-/* ========== 公开 API ========== */
-
 void feat_init(void)
 {
-    if (s_init_done) return;
-
-    /* 汉明窗 */
     for (int i = 0; i < SPK_FRAME_LEN; i++) {
-        s_hamming[i] = 0.54f - 0.46f * cosf(2.0f * PI * i / (SPK_FRAME_LEN - 1));
+        s_hamming[i] = 0.54f - 0.46f * cosf(2.0f * (float)M_PI * i / (SPK_FRAME_LEN - 1));
     }
 
-    /* Mel 滤波器组 bin 边界：共 N_MEL+2 个端点 */
-    float mel_low  = hz_to_mel(F_LOW);
-    float mel_high = hz_to_mel(F_HIGH);
-    for (int i = 0; i <= SPK_N_MEL + 1; i++) {
-        float mel = mel_low + (float)i * (mel_high - mel_low) / (float)(SPK_N_MEL + 1);
+    float mel_lo = hz_to_mel(80.0f);
+    float mel_hi = hz_to_mel(8000.0f);
+    for (int i = 0; i < SPK_N_MEL + 2; i++) {
+        float mel = mel_lo + (mel_hi - mel_lo) * i / (SPK_N_MEL + 1);
         float hz  = mel_to_hz(mel);
-        s_mel_bins[i] = (int)floorf((float)(SPK_FFT_N + 1) * hz / (float)SR);
-        /* 边界保护 */
-        if (s_mel_bins[i] < 0)             s_mel_bins[i] = 0;
-        if (s_mel_bins[i] > SPK_N_FFT_BINS - 1) s_mel_bins[i] = SPK_N_FFT_BINS - 1;
+        s_mel_bins[i] = (int)floorf((SPK_FFT_N + 1) * hz / SPK_SAMPLE_RATE);
+        if (s_mel_bins[i] >= SPK_N_FFT_BINS) s_mel_bins[i] = SPK_N_FFT_BINS - 1;
     }
 
-    /* DCT-II 系数表：C1..C13
-     * mfcc[k] = sum_{m=0}^{N_MEL-1} log_mel[m] * cos(PI*(k+1)*(m+0.5)/N_MEL)
-     */
     for (int k = 0; k < SPK_N_MFCC_BASE; k++) {
         for (int m = 0; m < SPK_N_MEL; m++) {
-            s_dct_cos[k][m] = cosf(PI * (float)(k + 1) * ((float)m + 0.5f) / (float)SPK_N_MEL);
+            s_dct_cos[k][m] = cosf((float)M_PI * (k + 1) * (m + 0.5f) / SPK_N_MEL);
         }
     }
-
-    s_init_done = 1;
 }
 
 int feat_extract_mfcc(const short *pcm, int n_samples,
                       float mfcc_out[][SPK_N_MFCC_BASE],
                       int max_frames, int *out_frames)
 {
-    if (!s_init_done) feat_init();
-    if (!pcm || n_samples < SPK_FRAME_LEN) {
-        if (out_frames) *out_frames = 0;
-        return -1;
-    }
+    static float power[SPK_N_FFT_BINS];
+    static float mel_energy[SPK_N_MEL];
 
     int n_frames = 0;
     int offset   = 0;
 
     while ((offset + SPK_FRAME_LEN) <= n_samples && n_frames < max_frames) {
-
-        /* 1. 预加重 + 汉明窗 → 实部；虚部清零 */
-        s_fft_re[0] = ((float)pcm[offset] - PRE_EMPH * (offset > 0 ? (float)pcm[offset - 1] : 0.0f))
-                      * s_hamming[0];
+        s_fft_re[0] = (float)pcm[offset] * s_hamming[0];
+        s_fft_im[0] = 0.0f;
         for (int i = 1; i < SPK_FRAME_LEN; i++) {
-            float cur = (float)pcm[offset + i];
-            float pre = (float)pcm[offset + i - 1];
-            s_fft_re[i] = (cur - PRE_EMPH * pre) * s_hamming[i];
-        }
-        memset(s_fft_im, 0, sizeof(float) * SPK_FFT_N);
-
-        /* 2. 512 点 FFT */
-        fft_inplace(s_fft_re, s_fft_im, SPK_FFT_N);
-
-        /* 3. 功率谱 |X[k]|^2，取 bin 0..256 */
-                /* 3. 功率谱 |X[k]|^2，取 bin 0..256 */
-        static float power[SPK_N_FFT_BINS];
-        for (int k = 0; k < SPK_N_FFT_BINS; k++) {
-            power[k] = s_fft_re[k] * s_fft_re[k] + s_fft_im[k] * s_fft_im[k];
+            float s = (float)pcm[offset + i] - 0.97f * (float)pcm[offset + i - 1];
+            s_fft_re[i] = s * s_hamming[i];
+            s_fft_im[i] = 0.0f;
         }
 
-        /* 4. Mel 三角滤波器组：26 个能量值 */
-                /* 4. Mel 三角滤波器组：26 个能量值 */
-        static float mel_energy[SPK_N_MEL];
+        fft_radix2(s_fft_re, s_fft_im, SPK_FFT_N);
+
+        for (int i = 0; i < SPK_N_FFT_BINS; i++) {
+            power[i] = s_fft_re[i]*s_fft_re[i] + s_fft_im[i]*s_fft_im[i];
+        }
+
         for (int m = 0; m < SPK_N_MEL; m++) {
             int lo  = s_mel_bins[m];
-            int mid = s_mel_bins[m + 1];
+            int ctr = s_mel_bins[m + 1];
             int hi  = s_mel_bins[m + 2];
-            float e = 0.0f;
-            int span_lo = mid - lo;
-            int span_hi = hi  - mid;
-            if (span_lo > 0) {
-                for (int k = lo; k < mid; k++)
-                    e += (float)(k - lo) / (float)span_lo * power[k];
+            float val = 0.0f;
+            for (int k = lo; k < ctr && k < SPK_N_FFT_BINS; k++) {
+                val += power[k] * (float)(k - lo) / (float)(ctr - lo + 1);
             }
-            if (span_hi > 0) {
-                for (int k = mid; k <= hi; k++)
-                    e += (float)(hi - k) / (float)span_hi * power[k];
+            for (int k = ctr; k <= hi && k < SPK_N_FFT_BINS; k++) {
+                val += power[k] * (float)(hi - k + 1) / (float)(hi - ctr + 1);
             }
-            mel_energy[m] = e;
+            mel_energy[m] = logf(val + 1e-10f);
         }
 
-        /* 5. 对数（自然对数，底限 1e-10 防 log(0)）*/
-        for (int m = 0; m < SPK_N_MEL; m++) {
-            mel_energy[m] = logf(mel_energy[m] > 1e-10f ? mel_energy[m] : 1e-10f);
-        }
-
-        /* 6. DCT-II → C1..C13 */
         for (int k = 0; k < SPK_N_MFCC_BASE; k++) {
-            float c = 0.0f;
-            for (int m = 0; m < SPK_N_MEL; m++)
-                c += mel_energy[m] * s_dct_cos[k][m];
-            mfcc_out[n_frames][k] = c;
+            float sum = 0.0f;
+            for (int m = 0; m < SPK_N_MEL; m++) {
+                sum += mel_energy[m] * s_dct_cos[k][m];
+            }
+            mfcc_out[n_frames][k] = sum;
         }
 
         n_frames++;
         offset += SPK_FRAME_SHIFT;
     }
 
-    if (out_frames) *out_frames = n_frames;
+    *out_frames = n_frames;
     return (n_frames > 0) ? 0 : -1;
 }

@@ -24,6 +24,9 @@
 
 #include "ci_nlp.h"
 #include "ci_log.h"
+#if USE_MFCC_DTW_SPK
+#include "mfcc_dtw_spk.h"
+#endif
 int nlp_cmd_cnt_default()
 {
     return NLP_CMD_CNT_DEFAULT;
@@ -174,6 +177,11 @@ int asr_result_callback(callback_asr_result_type_t *asr)
         #endif
         #if (MULT_INTENT < 2)
         mprintf("send result:%s %d\n", asr->cmd_word, asr->confidence);
+        #if USE_MFCC_DTW_SPK
+        spk_verify(asr->asrvoice_ptr,
+                   asr->voice_start_frame,
+                   asr->vocie_valid_frame_len);
+        #endif
         sys_msg_t send_msg;
         send_msg.msg_type = SYS_MSG_TYPE_ASR;
         send_msg.msg_data.asr_data.asr_status = MSG_ASR_STATUS_GOOD_RESULT;

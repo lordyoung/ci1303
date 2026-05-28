@@ -215,23 +215,17 @@ static int alg_cloud_protocol_init(void)
 /* SPK 验证结果回调 —— M1 阶段仅打印，M4 加开门 GPIO */
 static void spk_verify_callback(spk_result_t result, int dtw_dist_x1000)
 {
-    switch (result) {
-    case SPK_RESULT_ACCEPT:
-        mprintf("[MAIN] SPK ACCEPT dist=%d -> trigger door open\r\n", dtw_dist_x1000);
-        /* TODO M4: 在此触发开门 GPIO */
-        break;
-    case SPK_RESULT_REJECT:
-        mprintf("[MAIN] SPK REJECT dist=%d\r\n", dtw_dist_x1000);
-        break;
-    case SPK_RESULT_NO_TEMPLATE:
-        mprintf("[MAIN] SPK NO_TEMPLATE, please enroll first\r\n");
-        break;
-    default:
-        mprintf("[MAIN] SPK ERROR\r\n");
-        break;
+    if (result == SPK_RESULT_ACCEPT) {
+        mprintf("[SPK CB] ACCEPT dist=%d -> open door\n", dtw_dist_x1000);
+        /* TODO: trigger GPIO / TTS / door open logic here */
+    } else if (result == SPK_RESULT_REJECT) {
+        mprintf("[SPK CB] REJECT dist=%d\n", dtw_dist_x1000);
+    } else if (result == SPK_RESULT_NO_TEMPLATE) {
+        mprintf("[SPK CB] NO TEMPLATE\n");
+    } else {
+        mprintf("[SPK CB] ERROR\n");
     }
 }
-
 static void task_init(void *p_arg)
 {
 	#if USE_BLE

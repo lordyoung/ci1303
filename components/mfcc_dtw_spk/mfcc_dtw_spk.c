@@ -1,368 +1,224 @@
-/**
- * @file mfcc_dtw_spk.c
- * @brief Full implementation — state machine, enrollment, verification.
- *
- * Auto-enrollment policy:
- *   - On boot, if no template in flash, enter ENROLLING state.
- *   - User says "小屁开门" SPK_ENROLL_TIMES (3) times → template saved.
- *   - Subsequent recognitions enter VERIFY state.
- *
- * To re-enroll: call spk_delete_template() then reboot, or call spk_start_enroll().
- */
 #include <string.h>
-#include <math.h>
+#include <stdint.h>
 #include "mfcc_dtw_spk.h"
 #include "feat_extract.h"
 #include "feat_postproc.h"
 #include "dtw_match.h"
 #include "spk_template_store.h"
 #include "user_config.h"
-
+#include "ci_log.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
-#include "ci_log.h"
 
-extern int get_asrtop_asrfrmshift(void);
+#if USE_MFCC_DTW_SPK
 
-/* ===== 消息 ===== */
-typedef struct {
-    int n_samples;        /* PCM 副本中有效样本数 */
-} spk_msg_t;
-
-/* ===== 上下文 ===== */
-typedef enum {
-    SPK_STATE_IDLE = 0,
-    SPK_STATE_ENROLLING,
-    SPK_STATE_VERIFYING
-} spk_state_t;
-
-typedef struct {
-    spk_state_t       state;
-    spk_verify_cb_t   verify_cb;
-    int               template_loaded;
-    int               template_frm_num;
-    int               enroll_count;
-} spk_ctx_t;
-
-static spk_ctx_t      g_spk_ctx     = { 0 };
-static QueueHandle_t  g_spk_queue   = NULL;
-static TaskHandle_t   g_spk_task_h  = NULL;
-
-/* ===== 大缓冲：全部静态，避免栈溢出 ===== */
-
-/* PCM 副本（同步 memcpy 自 ASR 缓冲，避免被覆盖）*/
-static short s_pcm_copy[SPK_PCM_BUF_SIZE / sizeof(short)];   /* 48KB */
-
-/* 当前 utterance 的中间结果 */
-static float s_mfcc_buf[SPK_MAX_TEMPLATE_FRAMES][SPK_N_MFCC_BASE];
-static float s_feat_buf[SPK_MAX_TEMPLATE_FRAMES][SPK_FEAT_DIM];
-static int   s_feat_n_frames;
-
-/* 注册时三次样本 */
-static float s_enroll_feats[SPK_ENROLL_TIMES][SPK_MAX_TEMPLATE_FRAMES][SPK_FEAT_DIM];
-static int   s_enroll_frm_nums[SPK_ENROLL_TIMES];
-
-/* 已激活的模板（运行时从 Flash 加载或注册后写入）*/
-static float s_template[SPK_MAX_TEMPLATE_FRAMES][SPK_FEAT_DIM];
-
-/* ===== 内部函数声明 ===== */
-static void spk_task(void *arg);
-static void process_enroll_sample(int sample_idx);
-static void process_verify(void);
-static int  compute_average_template(void);
-
-/* ===== 工具：估算 PCM 能量（用于检测静音）===== */
-static int compute_avg_energy(const short *pcm, int n)
+int get_asrtop_asrfrmshift(void)
 {
-    if (n <= 0) return 0;
-    int64_t sum = 0;
-    for (int i = 0; i < n; i++) {
-        int32_t v = pcm[i];
-        sum += (v * v) / 1000;
-    }
-    return (int)(sum / n);
+    return 160; /* 16kHz, 10ms frame shift */
 }
 
-/* ===== 公开 API ===== */
+typedef enum {
+    SPK_STATE_IDLE      = 0,
+    SPK_STATE_ENROLLING = 1,
+    SPK_STATE_READY     = 2
+} spk_state_t;
+
+static spk_state_t     s_state       = SPK_STATE_IDLE;
+static spk_verify_cb_t s_verify_cb   = NULL;
+static spk_enroll_cb_t s_enroll_cb   = NULL;
+static int             s_enroll_cnt  = 0;
+
+static short s_pcm_copy[SPK_PCM_BUF_SIZE / sizeof(short)];
+
+static float s_mfcc_buf[SPK_MAX_TEMPLATE_FRAMES][SPK_N_MFCC_BASE];
+static float s_feat_buf[SPK_MAX_TEMPLATE_FRAMES][SPK_FEAT_DIM];
+
+static float s_enroll_feats[SPK_ENROLL_TIMES][SPK_MAX_TEMPLATE_FRAMES][SPK_FEAT_DIM];
+static int   s_enroll_frames[SPK_ENROLL_TIMES];
+
+static float s_template[SPK_MAX_TEMPLATE_FRAMES][SPK_FEAT_DIM];
+static int   s_template_frames = 0;
+
+static int process_pcm(const short *pcm, int n_samples,
+                        float feat_out[][SPK_FEAT_DIM], int *out_frames)
+{
+    int n_mfcc = 0;
+    if (feat_extract_mfcc(pcm, n_samples, s_mfcc_buf, SPK_MAX_TEMPLATE_FRAMES, &n_mfcc) != 0) {
+        mprintf("[SPK] MFCC extraction failed\n");
+        return -1;
+    }
+    feat_apply_cmn(s_mfcc_buf, n_mfcc);
+    *out_frames = feat_pack_with_delta(s_mfcc_buf, n_mfcc, feat_out);
+    return 0;
+}
+
+static void compute_average_template(void)
+{
+    int min_frames = s_enroll_frames[0];
+    for (int i = 1; i < SPK_ENROLL_TIMES; i++) {
+        if (s_enroll_frames[i] < min_frames) min_frames = s_enroll_frames[i];
+    }
+
+    for (int t = 0; t < min_frames; t++) {
+        for (int d = 0; d < SPK_FEAT_DIM; d++) {
+            float sum = 0.0f;
+            for (int i = 0; i < SPK_ENROLL_TIMES; i++) {
+                int ti = t * s_enroll_frames[i] / min_frames;
+                if (ti >= s_enroll_frames[i]) ti = s_enroll_frames[i] - 1;
+                sum += s_enroll_feats[i][ti][d];
+            }
+            s_template[t][d] = sum / SPK_ENROLL_TIMES;
+        }
+    }
+    s_template_frames = min_frames;
+    mprintf("[SPK] Average template: %d frames (from %d enrollments)\n",
+            s_template_frames, SPK_ENROLL_TIMES);
+}
+
+typedef struct {
+    uint32_t pcm_base_addr;
+    int      voice_start_frame;
+    int      valid_frame_len;
+} spk_msg_t;
+
+static QueueHandle_t s_spk_queue = NULL;
+
+static void spk_task(void *arg)
+{
+    spk_msg_t msg;
+    mprintf("[SPK] task started, state=%d\n", (int)s_state);
+
+    for (;;) {
+        if (xQueueReceive(s_spk_queue, &msg, portMAX_DELAY) != pdTRUE) continue;
+
+        int frame_shift = get_asrtop_asrfrmshift();
+        int n_samples   = msg.valid_frame_len * frame_shift;
+
+        if (n_samples > (int)(SPK_PCM_BUF_SIZE / sizeof(short))) {
+            n_samples = (int)(SPK_PCM_BUF_SIZE / sizeof(short));
+        }
+
+        uint32_t pcm_start = msg.pcm_base_addr
+                           + (uint32_t)(msg.voice_start_frame * frame_shift * sizeof(short));
+        memcpy(s_pcm_copy, (const void *)pcm_start, n_samples * sizeof(short));
+
+        if (s_state == SPK_STATE_READY) {
+            int n_feat = 0;
+            if (process_pcm(s_pcm_copy, n_samples, s_feat_buf, &n_feat) != 0) {
+                if (s_verify_cb) s_verify_cb(SPK_RESULT_ERROR, 0);
+                continue;
+            }
+            float dist = dtw_distance(s_feat_buf, n_feat,
+                                      s_template, s_template_frames,
+                                      SPK_DTW_BAND_RATIO_X100);
+            int dist_x1000 = (int)(dist * 1000.0f);
+            int thr_x1000  = SPK_DTW_THRESHOLD_X1000;
+            mprintf("[SPK] DTW dist=%d thr=%d -> %s\n",
+                    dist_x1000, thr_x1000,
+                    dist_x1000 < thr_x1000 ? "ACCEPT" : "REJECT");
+            spk_result_t result = (dist_x1000 < thr_x1000)
+                                  ? SPK_RESULT_ACCEPT : SPK_RESULT_REJECT;
+            if (s_verify_cb) s_verify_cb(result, dist_x1000);
+
+        } else if (s_state == SPK_STATE_ENROLLING) {
+            int n_feat = 0;
+            if (process_pcm(s_pcm_copy, n_samples, s_enroll_feats[s_enroll_cnt], &n_feat) != 0) {
+                mprintf("[SPK] Enroll sample %d failed\n", s_enroll_cnt + 1);
+                if (s_enroll_cb) s_enroll_cb(SPK_ENROLL_FAIL, s_enroll_cnt, SPK_ENROLL_TIMES);
+                continue;
+            }
+            s_enroll_frames[s_enroll_cnt] = n_feat;
+            mprintf("[SPK] Enrolled sample %d/%d (%d frames)\n",
+                    s_enroll_cnt + 1, SPK_ENROLL_TIMES, n_feat);
+            if (s_enroll_cb) s_enroll_cb(SPK_ENROLL_PROGRESS,
+                                          s_enroll_cnt + 1, SPK_ENROLL_TIMES);
+            s_enroll_cnt++;
+
+            if (s_enroll_cnt >= SPK_ENROLL_TIMES) {
+                compute_average_template();
+                if (spk_template_save(s_template, s_template_frames) == 0) {
+                    s_state = SPK_STATE_READY;
+                    mprintf("[SPK] Enrollment complete, template saved\n");
+                    if (s_enroll_cb) s_enroll_cb(SPK_ENROLL_DONE,
+                                                  SPK_ENROLL_TIMES, SPK_ENROLL_TIMES);
+                } else {
+                    mprintf("[SPK] Template save failed, staying in ENROLLING\n");
+                    s_enroll_cnt = 0;
+                    if (s_enroll_cb) s_enroll_cb(SPK_ENROLL_FAIL,
+                                                  s_enroll_cnt, SPK_ENROLL_TIMES);
+                }
+            }
+        }
+    }
+}
 
 int spk_init(spk_verify_cb_t verify_cb)
 {
-    mprintf("[SPK] init start\r\n");
+    mprintf("[SPK] spk_init called\n");
+    s_verify_cb = verify_cb;
+    s_enroll_cb = NULL;
+    s_enroll_cnt = 0;
 
     feat_init();
-    mprintf("[SPK] feat_init done\r\n");
+    mprintf("[SPK] feat_init done\n");
 
-    g_spk_ctx.state            = SPK_STATE_IDLE;
-    g_spk_ctx.verify_cb        = verify_cb;
-    g_spk_ctx.template_loaded  = 0;
-    g_spk_ctx.template_frm_num = 0;
-    g_spk_ctx.enroll_count     = 0;
-
-    g_spk_queue = xQueueCreate(2, sizeof(spk_msg_t));
-    if (g_spk_queue == NULL) {
-        mprintf("[SPK] ERROR: queue create failed\r\n");
-        return -1;
-    }
-    mprintf("[SPK] queue created ok\r\n");
-
-    BaseType_t ret = xTaskCreate(spk_task, "spk", 1024, NULL, 3, &g_spk_task_h);
-    if (ret != pdPASS) {
-        mprintf("[SPK] ERROR: task create failed ret=%d\r\n", (int)ret);
-        return -1;
-    }
-    mprintf("[SPK] task created ok\r\n");
-
-    /* 启动时加载模板 */
-    int loaded_frm = 0;
-    int load_ret = spk_template_load(s_template, SPK_MAX_TEMPLATE_FRAMES, &loaded_frm);
-    if (load_ret == 0 && loaded_frm > 0) {
-        g_spk_ctx.template_loaded  = 1;
-        g_spk_ctx.template_frm_num = loaded_frm;
-        g_spk_ctx.state            = SPK_STATE_VERIFYING;
-        mprintf("[SPK] template loaded, frm=%d -> VERIFY mode\r\n", loaded_frm);
+    if (spk_template_load(s_template, &s_template_frames) == 0) {
+        s_state = SPK_STATE_READY;
+        mprintf("[SPK] Template found in Flash, state=READY\n");
     } else {
-        g_spk_ctx.state        = SPK_STATE_ENROLLING;
-        g_spk_ctx.enroll_count = 0;
-        mprintf("[SPK] no template -> ENROLL mode (say command %d times)\r\n",
-                SPK_ENROLL_TIMES);
+        s_state = SPK_STATE_ENROLLING;
+        mprintf("[SPK] No template, state=ENROLLING (say '%s' %d times)\n",
+                "xiao pi kai men", SPK_ENROLL_TIMES);
     }
 
-    mprintf("[SPK] init done state=%d\r\n", (int)g_spk_ctx.state);
+    s_spk_queue = xQueueCreate(4, sizeof(spk_msg_t));
+    if (!s_spk_queue) {
+        mprintf("[SPK] Queue create failed!\n");
+        return -1;
+    }
+    xTaskCreate(spk_task, "spk task", 1024, NULL, 3, NULL);
+    mprintf("[SPK] spk task created\n");
     return 0;
 }
 
 int spk_start_enroll(spk_enroll_cb_t enroll_cb)
 {
-    (void)enroll_cb;
-    g_spk_ctx.state        = SPK_STATE_ENROLLING;
-    g_spk_ctx.enroll_count = 0;
-    mprintf("[SPK] enroll restarted (say command %d times)\r\n", SPK_ENROLL_TIMES);
-    return 0;
-}
-
-int spk_delete_template(void)
-{
-    spk_template_clear();
-    g_spk_ctx.template_loaded  = 0;
-    g_spk_ctx.template_frm_num = 0;
-    g_spk_ctx.state            = SPK_STATE_ENROLLING;
-    g_spk_ctx.enroll_count     = 0;
-    mprintf("[SPK] template deleted, back to ENROLL mode\r\n");
+    s_enroll_cb  = enroll_cb;
+    s_enroll_cnt = 0;
+    s_state      = SPK_STATE_ENROLLING;
+    mprintf("[SPK] Re-enrollment started\n");
     return 0;
 }
 
 int spk_verify(uint32_t pcm_base_addr, int voice_start_frame, int valid_frame_len)
 {
-    if (g_spk_queue == NULL) {
-        mprintf("[SPK] verify called before init\r\n");
-        return -1;
-    }
-    if (valid_frame_len <= 0 || pcm_base_addr == 0) {
-        mprintf("[SPK] verify: invalid args ptr=0x%x frm=%d\r\n",
-                pcm_base_addr, valid_frame_len);
-        return -1;
-    }
+    if (!s_spk_queue) return -1;
+    if (s_state == SPK_STATE_IDLE) return -1;
 
-    int asr_frm_shift = get_asrtop_asrfrmshift();
-    int n_samples_total = valid_frame_len * asr_frm_shift;
-    int byte_offset     = voice_start_frame * asr_frm_shift * (int)sizeof(short);
-    const short *src    = (const short *)(pcm_base_addr + byte_offset);
-
-    /* 同步 memcpy 到副本，防止 ASR 缓冲被覆盖 */
-    int max_samples = (int)(sizeof(s_pcm_copy) / sizeof(short));
-    int copy_samples = n_samples_total;
-    if (copy_samples > max_samples) {
-        mprintf("[SPK] WARN: pcm truncated %d -> %d samples\r\n",
-                copy_samples, max_samples);
-        copy_samples = max_samples;
-    }
-    memcpy(s_pcm_copy, src, copy_samples * sizeof(short));
-
-    mprintf("[ASR->SPK] start_frm=%d valid_frm=%d frm_shift=%d samples=%d state=%d\r\n",
-            voice_start_frame, valid_frame_len, asr_frm_shift,
-            copy_samples, (int)g_spk_ctx.state);
-
-    spk_msg_t msg;
-    msg.n_samples = copy_samples;
-    if (xQueueSend(g_spk_queue, &msg, 0) != pdPASS) {
-        mprintf("[SPK] queue full, drop msg\r\n");
+    spk_msg_t msg = {
+        .pcm_base_addr    = pcm_base_addr,
+        .voice_start_frame = voice_start_frame,
+        .valid_frame_len  = valid_frame_len
+    };
+    mprintf("[ASR->SPK] frm_start=%d len=%d\n", voice_start_frame, valid_frame_len);
+    BaseType_t ok = xQueueSend(s_spk_queue, &msg, 0);
+    if (ok != pdTRUE) {
+        mprintf("[SPK] Queue full, dropped\n");
         return -1;
     }
     return 0;
 }
 
-/* ===== 内部：SPK 工作任务 ===== */
-
-static void spk_task(void *arg)
+int spk_delete_template(void)
 {
-    (void)arg;
-    mprintf("[SPK] task running\r\n");
-
-    spk_msg_t msg;
-    for (;;) {
-        if (xQueueReceive(g_spk_queue, &msg, portMAX_DELAY) != pdPASS) continue;
-
-        /* 能量检查 */
-        int energy = compute_avg_energy(s_pcm_copy, msg.n_samples);
-        mprintf("[SPK] pcm energy=%d (>100=voice, <100=silence)\r\n", energy);
-
-        /* 提取 MFCC */
-        int mfcc_frm = 0;
-        int ret = feat_extract_mfcc(s_pcm_copy, msg.n_samples,
-                                     s_mfcc_buf, SPK_MAX_TEMPLATE_FRAMES, &mfcc_frm);
-        if (ret != 0 || mfcc_frm < 5) {
-            mprintf("[SPK] mfcc extract failed ret=%d frm=%d\r\n", ret, mfcc_frm);
-            if (g_spk_ctx.verify_cb) g_spk_ctx.verify_cb(SPK_RESULT_ERROR, 0);
-            continue;
-        }
-        mprintf("[SPK] mfcc extracted frm=%d\r\n", mfcc_frm);
-
-        /* CMN */
-        feat_apply_cmn(s_mfcc_buf, mfcc_frm);
-
-        /* Delta + DeltaDelta 拼接 → 39 维 */
-        if (feat_pack_with_delta(s_mfcc_buf, mfcc_frm, s_feat_buf) != 0) {
-            mprintf("[SPK] feat pack failed\r\n");
-            if (g_spk_ctx.verify_cb) g_spk_ctx.verify_cb(SPK_RESULT_ERROR, 0);
-            continue;
-        }
-        s_feat_n_frames = mfcc_frm;
-        mprintf("[SPK] feat packed dim=%d frm=%d\r\n", SPK_FEAT_DIM, mfcc_frm);
-
-        /* 分支：注册 vs 验证 */
-        if (g_spk_ctx.state == SPK_STATE_ENROLLING) {
-            process_enroll_sample(g_spk_ctx.enroll_count);
-        } else if (g_spk_ctx.state == SPK_STATE_VERIFYING) {
-            process_verify();
-        } else {
-            mprintf("[SPK] state=IDLE, ignore\r\n");
-        }
+    int ret = spk_template_delete();
+    if (ret == 0) {
+        s_state      = SPK_STATE_ENROLLING;
+        s_enroll_cnt = 0;
+        mprintf("[SPK] Template deleted, state=ENROLLING\n");
     }
+    return ret;
 }
 
-/* ===== 内部：处理注册样本 ===== */
-
-static void process_enroll_sample(int idx)
-{
-    if (idx < 0 || idx >= SPK_ENROLL_TIMES) {
-        mprintf("[SPK] enroll idx out of range %d\r\n", idx);
-        return;
-    }
-
-    /* 拷贝特征到 s_enroll_feats[idx] */
-    memcpy(s_enroll_feats[idx], s_feat_buf,
-           sizeof(float) * s_feat_n_frames * SPK_FEAT_DIM);
-    s_enroll_frm_nums[idx] = s_feat_n_frames;
-
-    mprintf("[SPK] enroll sample %d/%d stored, frm=%d\r\n",
-            idx + 1, SPK_ENROLL_TIMES, s_feat_n_frames);
-
-    /* 一致性检查：第 idx 个样本与第 0 个的 DTW 距离 */
-    if (idx > 0) {
-        float d = dtw_distance(s_enroll_feats[0], s_enroll_frm_nums[0],
-                                s_enroll_feats[idx], s_enroll_frm_nums[idx],
-                                SPK_DTW_BAND_RATIO_X100);
-        mprintf("[SPK] consistency: sample1 vs sample%d dtw_dist=%d (lower=better)\r\n",
-                idx + 1, (int)(d * 1000));
-        if (d > 0.8f) {
-            mprintf("[SPK] WARN: sample%d looks different, consider re-enrolling\r\n",
-                    idx + 1);
-        }
-    }
-
-    g_spk_ctx.enroll_count++;
-    if (g_spk_ctx.enroll_count >= SPK_ENROLL_TIMES) {
-        /* 全部收集完毕，计算平均模板并写 Flash */
-        mprintf("[SPK] all %d samples collected, computing avg template\r\n",
-                SPK_ENROLL_TIMES);
-        if (compute_average_template() == 0) {
-            spk_template_save(s_template, g_spk_ctx.template_frm_num);
-
-            /* 读回验证 */
-            float verify_tmpl[SPK_MAX_TEMPLATE_FRAMES][SPK_FEAT_DIM];
-            int verify_frm = 0;
-            if (spk_template_load(verify_tmpl, SPK_MAX_TEMPLATE_FRAMES, &verify_frm) == 0
-                && verify_frm == g_spk_ctx.template_frm_num) {
-                int diff_x1000 = 0;
-                for (int t = 0; t < verify_frm; t++)
-                    for (int d = 0; d < SPK_FEAT_DIM; d++)
-                        diff_x1000 += (int)(fabsf(s_template[t][d] - verify_tmpl[t][d]) * 1000);
-                mprintf("[SPK] flash verify: frm_match=YES total_diff_x1000=%d (should=0)\r\n",
-                        diff_x1000);
-            } else {
-                mprintf("[SPK] flash verify: FAILED (frm=%d expected=%d)\r\n",
-                        verify_frm, g_spk_ctx.template_frm_num);
-            }
-
-            g_spk_ctx.template_loaded = 1;
-            g_spk_ctx.state           = SPK_STATE_VERIFYING;
-            mprintf("[SPK] === ENROLL DONE -> VERIFY mode ===\r\n");
-        } else {
-            mprintf("[SPK] avg template failed, restart enrollment\r\n");
-            g_spk_ctx.enroll_count = 0;
-        }
-    }
-}
-
-/* ===== 内部：处理验证 ===== */
-
-static void process_verify(void)
-{
-    if (!g_spk_ctx.template_loaded || g_spk_ctx.template_frm_num <= 0) {
-        mprintf("[SPK] no template loaded\r\n");
-        if (g_spk_ctx.verify_cb) g_spk_ctx.verify_cb(SPK_RESULT_NO_TEMPLATE, 0);
-        return;
-    }
-
-    float d = dtw_distance(s_template, g_spk_ctx.template_frm_num,
-                            s_feat_buf, s_feat_n_frames,
-                            SPK_DTW_BAND_RATIO_X100);
-    int dist_x1000 = (int)(d * 1000);
-    int thr_x1000  = SPK_DTW_THRESHOLD_X1000;
-
-    mprintf("[SPK] DTW dist=%d thr=%d -> %s\r\n",
-            dist_x1000, thr_x1000,
-            dist_x1000 < thr_x1000 ? "ACCEPT" : "REJECT");
-
-    if (dist_x1000 < thr_x1000) {
-        if (g_spk_ctx.verify_cb) g_spk_ctx.verify_cb(SPK_RESULT_ACCEPT, dist_x1000);
-    } else {
-        if (g_spk_ctx.verify_cb) g_spk_ctx.verify_cb(SPK_RESULT_REJECT, dist_x1000);
-    }
-}
-
-/* ===== 内部：DTW 对齐求平均模板 =====
- * 简化策略：以第 0 个样本为参考长度，把第 1、2 个样本按相同帧索引相加再取平均。
- * （比标准 DTW Barycenter Averaging 简单，但效果对 3 个一致性高的样本足够好。）
- */
-static int compute_average_template(void)
-{
-    int ref_frm = s_enroll_frm_nums[0];
-    if (ref_frm <= 0) return -1;
-
-    /* 初始化为 sample 0 */
-    memcpy(s_template, s_enroll_feats[0],
-           sizeof(float) * ref_frm * SPK_FEAT_DIM);
-
-    /* 累加其他样本（按比例索引映射，简单线性插值）*/
-    for (int i = 1; i < SPK_ENROLL_TIMES; i++) {
-        int src_frm = s_enroll_frm_nums[i];
-        if (src_frm <= 0) continue;
-        for (int t = 0; t < ref_frm; t++) {
-            int src_t = t * src_frm / ref_frm;
-            if (src_t >= src_frm) src_t = src_frm - 1;
-            for (int d = 0; d < SPK_FEAT_DIM; d++) {
-                s_template[t][d] += s_enroll_feats[i][src_t][d];
-            }
-        }
-    }
-    /* 求平均 */
-    for (int t = 0; t < ref_frm; t++)
-        for (int d = 0; d < SPK_FEAT_DIM; d++)
-            s_template[t][d] /= (float)SPK_ENROLL_TIMES;
-
-    g_spk_ctx.template_frm_num = ref_frm;
-    mprintf("[SPK] avg template computed, frm=%d\r\n", ref_frm);
-    return 0;
-}
+#endif /* USE_MFCC_DTW_SPK */

@@ -215,22 +215,23 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #error "The vpr template num max 4
 "
 #endif
-#endif /* USE_VPR */
+#endif
 
 #define USE_MFCC_DTW_SPK              1
-#if USE_MFCC_DTW_SPK
-/* === SPK (MFCC+DTW Speaker Recognition) NVDATA ID 分配
- *   位于用户区 0x60000001 ~ 0xF0000000 内
- *   远离 VPR 集群 (0xA00000xx) 和 USER_WAKEUP_NET (0x60000004)
- *   经全仓库 grep 确认 0x60100000~0x60100007 全部未占用
- */
-#define NVDATA_ID_SPK_BASE              0x60100000
-#define NVDATA_ID_SPK_TEMPLATE          (NVDATA_ID_SPK_BASE + 0)
-#define NVDATA_ID_SPK_TEMPLATE_META     (NVDATA_ID_SPK_BASE + 1)
-#define NVDATA_ID_SPK_THRESHOLD         (NVDATA_ID_SPK_BASE + 2)
-/* 0x60100003 ~ 0x60100007 预留扩展 */
+/* ===== MFCC+DTW Speaker Recognition ===== */
+#define USE_MFCC_DTW_SPK            1           /* 1=enable, 0=disable */
+#define SPK_ENROLL_TIMES            3           /* number of enrollment utterances */
+#define SPK_DTW_THRESHOLD_X1000     650         /* DTW accept threshold * 1000 */
+#define SPK_DTW_BAND_RATIO_X100     20          /* Sakoe-Chiba band % */
+#define SPK_PCM_BUF_SIZE            (48*1024)   /* max PCM copy buffer, bytes */
+#define SPK_MAX_TEMPLATE_FRAMES     150         /* max feature frames per utterance */
+#define SPK_DEBUG                   1
 
-#endif
+#define NVDATA_ID_SPK_BASE          0x60100000
+#define NVDATA_ID_SPK_TEMPLATE      (NVDATA_ID_SPK_BASE + 0)
+#define NVDATA_ID_SPK_TEMPLATE_META (NVDATA_ID_SPK_BASE + 1)
+#define NVDATA_ID_SPK_THRESHOLD     (NVDATA_ID_SPK_BASE + 2)
+/* ===== end MFCC+DTW ===== */
 
 #if USE_SED_CRY || USE_SED_SNORE
 #define NO_ASR_FLOW                     1         //不可修改

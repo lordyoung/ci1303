@@ -95,7 +95,7 @@ else ifeq ($(CI_ALG_TYPE), $(USE_VPR))
 ALG_PRO_LINK_LDS := ../lds/ci130x_alg_pro_vpr.lds
 LIB_BNPU_CORE_ALG_PRO := libbnpu_core_alg_pro_vpr.a
 C_FLAGS += -DUSE_VPR=1 
-LIBS := -lasr_dis_deepse_v2
+LIBS := -lasr_bnpu_dis_deepse_v2
 USE_DECODE_FRM := 1
 else ifeq ($(CI_ALG_TYPE), $(USE_WMAN_VPR))
 ALG_PRO_LINK_LDS := ../lds/ci130x_alg_pro_wman_vpr.lds

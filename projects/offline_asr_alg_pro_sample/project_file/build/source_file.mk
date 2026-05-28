@@ -720,7 +720,6 @@ C_FLAGS += -I$(SDK_PATH)/components/tts
 C_FLAGS += -I$(SDK_PATH)/components/tts/front_end3
 C_FLAGS += -I$(SDK_PATH)/components/tts/vocoder
 C_FLAGS += -I$(SDK_PATH)/components/tts/ringbuffer
-C_FLAGS += -I$(SDK_PATH)/components/mfcc_dtw_spk
 OBJS += build/objs/mfcc_dtw_spk.o
 -include build/objs/mfcc_dtw_spk.d
 build/objs/mfcc_dtw_spk.o : $(SDK_PATH)/components/mfcc_dtw_spk/mfcc_dtw_spk.c
@@ -746,3 +745,4 @@ OBJS += build/objs/spk_template_store.o
 build/objs/spk_template_store.o : $(SDK_PATH)/components/mfcc_dtw_spk/spk_template_store.c
 	$(CC_PREFIX)$(CC) $(C_FLAGS) -c -o "$@" "$<"
 
+C_FLAGS += -I$(SDK_PATH)/components/mfcc_dtw_spk
