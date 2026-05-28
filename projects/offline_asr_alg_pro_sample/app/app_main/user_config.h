@@ -209,7 +209,18 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #define VPT_SIZE                        (192*sizeof(float))   //模板大小  -不可修改
 #define NVDATA_ID_VP_NUMBER             0xA0000001      //存储模板数量NV基地址 -不可修改
 #define NVDATA_ID_VP_INFO               0xA0000002      //存储模板ID NV基地址，每个用户模版数是重复录入次数-不可修改
-                                                        //输出给用户的id就是（地址-0xA0000002/VP_REC_TIMES 
+           
+/* === SPK (MFCC+DTW Speaker Recognition) NVDATA ID 分配
+ *   位于用户区 0x60000001 ~ 0xF0000000 内
+ *   远离 VPR 集群 (0xA00000xx) 和 USER_WAKEUP_NET (0x60000004)
+ *   经全仓库 grep 确认 0x60100000~0x60100007 全部未占用
+ */
+#define NVDATA_ID_SPK_BASE              0x60100000
+#define NVDATA_ID_SPK_TEMPLATE          (NVDATA_ID_SPK_BASE + 0)
+#define NVDATA_ID_SPK_TEMPLATE_META     (NVDATA_ID_SPK_BASE + 1)
+#define NVDATA_ID_SPK_THRESHOLD         (NVDATA_ID_SPK_BASE + 2)
+/* 0x60100003 ~ 0x60100007 预留扩展 */
+//输出给用户的id就是（地址-0xA0000002/VP_REC_TIMES 
 #define NVDATA_ID_VP_MODE               0xA0000003      //存储模板NV基地址 -不可修改
 #if (MAX_VP_TEMPLATE_NUM > 4)
 #error "The vpr template num max 4\n"
@@ -403,5 +414,14 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #define  WAKE_UP_NET_TOTAL 0
 // 切换播报提示id与唤醒网络序号的偏移量
 #define  PLAY_ID_OFFSET_SWITCH 0
+
+/* === SPK 模块功能开关与参数 === */
+#define USE_MFCC_DTW_SPK            1
+#define SPK_ENROLL_TIMES            3       /* 注册时录音次数 */
+#define SPK_DTW_THRESHOLD_X1000     650     /* DTW 距离阈值×1000，M4 现场调参 */
+#define SPK_DTW_BAND_RATIO_X100     20      /* Sakoe-Chiba 带宽×100 (20%) */
+#define SPK_PCM_BUF_SIZE            (48*1024) /* SPK 内部 PCM 副本缓冲 */
+#define SPK_MAX_TEMPLATE_FRAMES     150     /* 单模板最大帧数 (~2.4 秒) */
+#define SPK_DEBUG                   1       /* 调试打印开关，M4 之后关 */
 
 #endif /* _USER_CONFIG_H_ */

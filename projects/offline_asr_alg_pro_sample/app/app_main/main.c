@@ -11,11 +11,13 @@
 #include <malloc.h>
 #include "FreeRTOS.h" 
 #include "task.h"
+
 #include "sdk_default_config.h"
 #include "ci130x_core_eclic.h"
 #include "ci130x_spiflash.h"
 #include "ci130x_gpio.h"
 #include "ci130x_dma.h"
+
 #if !SIMPLE_AUDIO_PLAYER_ENABLE
 #include "audio_play_api.h"
 #include "audio_play_decoder.h"
@@ -51,6 +53,7 @@
 #include "ci_nlp_user.h"
 #include "ci_nlp.h"
 #include "cias_record_demo.h"
+#include "mfcc_dtw_spk.h"
 /**
  * @brief 硬件初始化
  *          这个函数主要用于系统上电后初始化硬件寄存器到初始值，配置中断向量表初始化芯片io配置时钟
@@ -157,6 +160,8 @@ static void welcome(void)
         while(1);
     }
 }
+static void spk_verify_callback(spk_result_t result, int dtw_dist_x1000);
+
 //算法模型初始化
 static int alg_model_init(void)
 {
@@ -180,6 +185,11 @@ static int alg_model_init(void)
     extern void get_ci_sed_model_addr(void);
     get_ci_sed_model_addr();
     #endif
+
+    #if USE_MFCC_DTW_SPK
+    spk_init(spk_verify_callback);
+    #endif
+
     return 0;
 }
 #if CLOUD_UART_PROTOCOL_EN
@@ -201,6 +211,26 @@ static int alg_cloud_protocol_init(void)
     return 0;
 }
 #endif
+
+/* SPK 验证结果回调 —— M1 阶段仅打印，M4 加开门 GPIO */
+static void spk_verify_callback(spk_result_t result, int dtw_dist_x1000)
+{
+    switch (result) {
+    case SPK_RESULT_ACCEPT:
+        mprintf("[MAIN] SPK ACCEPT dist=%d -> trigger door open\r\n", dtw_dist_x1000);
+        /* TODO M4: 在此触发开门 GPIO */
+        break;
+    case SPK_RESULT_REJECT:
+        mprintf("[MAIN] SPK REJECT dist=%d\r\n", dtw_dist_x1000);
+        break;
+    case SPK_RESULT_NO_TEMPLATE:
+        mprintf("[MAIN] SPK NO_TEMPLATE, please enroll first\r\n");
+        break;
+    default:
+        mprintf("[MAIN] SPK ERROR\r\n");
+        break;
+    }
+}
 
 static void task_init(void *p_arg)
 {
