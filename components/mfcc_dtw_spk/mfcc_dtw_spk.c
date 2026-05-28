@@ -13,7 +13,10 @@
 
 #if USE_MFCC_DTW_SPK
 
-extern int get_asrtop_asrfrmshift(void);
+int get_asrtop_asrfrmshift(void)
+{
+    return 160; /* 16kHz, 10ms frame shift */
+}
 
 typedef enum {
     SPK_STATE_IDLE      = 0,
@@ -105,7 +108,7 @@ static void spk_task(void *arg)
             int n_feat = 0;
             if (process_pcm(s_pcm_copy, n_samples, s_feat_buf, &n_feat) != 0) {
                 mprintf("[SPK] Enroll sample %d failed\n", s_enroll_cnt + 1);
-                if (s_enroll_cb) s_enroll_cb(SPK_ENROLL_STATE_FAILED,
+                if (s_enroll_cb) s_enroll_cb(SPK_ENROLL_FAIL,
                                               s_enroll_cnt, SPK_ENROLL_TIMES);
                 continue;
             }
@@ -133,7 +136,7 @@ static void spk_task(void *arg)
 
             mprintf("[SPK] Enrolled sample %d/%d (%d frames)\n",
                     s_enroll_cnt + 1, SPK_ENROLL_TIMES, n_feat);
-            if (s_enroll_cb) s_enroll_cb(SPK_ENROLL_STATE_RECORDING,
+            if (s_enroll_cb) s_enroll_cb(SPK_ENROLL_PROGRESS,
                                           s_enroll_cnt + 1, SPK_ENROLL_TIMES);
             s_enroll_cnt++;
 
@@ -143,12 +146,12 @@ static void spk_task(void *arg)
                 if (spk_template_save(s_template, s_template_frames) == 0) {
                     s_state = SPK_STATE_READY;
                     mprintf("[SPK] Enrollment complete, template saved\n");
-                    if (s_enroll_cb) s_enroll_cb(SPK_ENROLL_STATE_DONE,
+                    if (s_enroll_cb) s_enroll_cb(SPK_ENROLL_DONE,
                                                   SPK_ENROLL_TIMES, SPK_ENROLL_TIMES);
                 } else {
                     mprintf("[SPK] Template save failed, re-enrolling\n");
                     s_enroll_cnt = 0;
-                    if (s_enroll_cb) s_enroll_cb(SPK_ENROLL_STATE_FAILED,
+                    if (s_enroll_cb) s_enroll_cb(SPK_ENROLL_FAIL,
                                                   0, SPK_ENROLL_TIMES);
                 }
             }

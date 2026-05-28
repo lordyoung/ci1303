@@ -178,9 +178,23 @@ int asr_result_callback(callback_asr_result_type_t *asr)
         #if (MULT_INTENT < 2)
         mprintf("send result:%s %d\n", asr->cmd_word, asr->confidence);
         #if USE_MFCC_DTW_SPK
-        spk_verify(asr->asrvoice_ptr,
-                   asr->voice_start_frame,
-                   asr->vocie_valid_frame_len);
+        {
+            int spk_start = asr->voice_start_frame;
+            int spk_len   = asr->vocie_valid_frame_len;
+            mprintf("[ASR DBG] ptr=0x%x start=%d len=%d frm=%d\n",
+                    asr->asrvoice_ptr, spk_start, spk_len, asr->frm);
+            /* Fallback: ROM only fills voice_start/valid_frame_len when VPR/PWK/DOA
+               is enabled. Without those, use asr->frm (total decoded frames). */
+            if (spk_len <= 0) {
+                spk_start = 0;
+                spk_len   = asr->frm;
+            }
+            if (spk_len > 0 && asr->asrvoice_ptr != 0) {
+                spk_verify(asr->asrvoice_ptr, spk_start, spk_len);
+            } else {
+                mprintf("[SPK] no valid PCM info, skip verify\n");
+            }
+        }
         #endif
         sys_msg_t send_msg;
         send_msg.msg_type = SYS_MSG_TYPE_ASR;
