@@ -31,26 +31,41 @@ int dtw_match(const float *query, int lq,
         lq > SPK_MAX_TEMPLATE_FRAMES ||
         lr > SPK_MAX_TEMPLATE_FRAMES) return -1;
 
-    int band = (lr * band_pct + 50) / 100;
-    if (band < 2) band = 2;
-
     const float INF = 1e9f;
 
-    /* Initialize first query row */
+    /* Sakoe-Chiba band. Two fixes vs. the naive version:
+     *  1) the band is centered on the diagonal that connects (0,0) and
+     *     (lq-1, lr-1), i.e. j ≈ i * (lr-1)/(lq-1) — not on j = i. Without
+     *     this, when lq and lr differ a lot the window drifts off the valid
+     *     j range and the path can never reach the corner (=> INF => -1).
+     *  2) the band is widened to at least |lq-lr|+2 so consecutive windows
+     *     always overlap and the corner stays reachable. */
+    int diff = lq - lr; if (diff < 0) diff = -diff;
+    int band = (((lq > lr) ? lq : lr) * band_pct + 50) / 100;
+    if (band < diff + 2) band = diff + 2;
+
+    float slope = (lq > 1) ? (float)(lr - 1) / (float)(lq - 1) : 0.0f;
+
     for (int j = 0; j < lr; j++) s_prev[j] = INF;
-    s_prev[0] = cosine_dist(query, ref, dim);
-    for (int j = 1; j < lr && j <= band; j++) {
-        float cost = cosine_dist(query, ref + j * dim, dim);
-        s_prev[j]  = s_prev[j - 1] + cost;
+
+    /* first query row (i = 0): center = 0, reached by horizontal moves only */
+    {
+        int j_hi = band; if (j_hi >= lr) j_hi = lr - 1;
+        s_prev[0] = cosine_dist(query, ref, dim);
+        for (int j = 1; j <= j_hi; j++) {
+            float cost = cosine_dist(query, ref + j * dim, dim);
+            s_prev[j]  = s_prev[j - 1] + cost;
+        }
     }
 
-    /* Fill remaining rows */
+    /* remaining rows */
     for (int i = 1; i < lq; i++) {
         const float *qi = query + i * dim;
         for (int j = 0; j < lr; j++) s_curr[j] = INF;
 
-        int j_lo = i - band; if (j_lo < 0) j_lo = 0;
-        int j_hi = i + band; if (j_hi >= lr) j_hi = lr - 1;
+        int center = (int)(i * slope + 0.5f);
+        int j_lo = center - band; if (j_lo < 0)    j_lo = 0;
+        int j_hi = center + band; if (j_hi >= lr)  j_hi = lr - 1;
 
         for (int j = j_lo; j <= j_hi; j++) {
             float cost = cosine_dist(qi, ref + j * dim, dim);
