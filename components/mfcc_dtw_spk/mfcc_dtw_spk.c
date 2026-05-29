@@ -96,7 +96,7 @@ static void process_utterance(int n_pcm_samples)
         }
         int energy = (int)(sum / n_pcm_samples);
         mprintf("[SPK] pcm energy=%d n=%d%s\n", energy, n_pcm_samples,
-                energy < 200 ? " WARN:quiet" : "");
+                energy < 100 ? " WARN:quiet" : "");
     }
 
     /* 1. MFCC */
