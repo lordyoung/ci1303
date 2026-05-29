@@ -112,7 +112,7 @@ Disassembly of section .init:
 1ff5118a:	73a28293          	addi	t0,t0,1850 # 1ff628c0 <trap_entry>
 1ff5118e:	30529073          	csrw	mtvec,t0
 1ff51192:	00082297          	auipc	t0,0x82
-1ff51196:	e6e28293          	addi	t0,t0,-402 # 1ffd3000 <SDK_ALG_PRO_SRAM_HOST_AEC_END_ADDR>
+1ff51196:	e6e28293          	addi	t0,t0,-402 # 1ffd3000 <__befor_os_int_sp>
 1ff5119a:	34029073          	csrw	mscratch,t0
 1ff5119e:	6289                	lui	t0,0x2
 1ff511a0:	3002a073          	csrs	mstatus,t0
@@ -454,7 +454,7 @@ Disassembly of section .text:
 1ff515e4:	0017e793          	ori	a5,a5,1
 1ff515e8:	cc5c                	sw	a5,28(s0)
 1ff515ea:	1ff51437          	lui	s0,0x1ff51
-1ff515ee:	c0040413          	addi	s0,s0,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff515ee:	c0040413          	addi	s0,s0,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff515f2:	4404                	lw	s1,8(s0)
 1ff515f4:	478d                	li	a5,3
 1ff515f6:	8091                	srli	s1,s1,0x4
@@ -1885,7 +1885,7 @@ Disassembly of section .text:
 1ff525d6:	892e                	mv	s2,a1
 1ff525d8:	0d359563          	bne	a1,s3,1ff526a2 <set_intent_output.constprop.0+0xf0>
 1ff525dc:	1ff517b7          	lui	a5,0x1ff51
-1ff525e0:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff525e0:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff525e4:	1107a783          	lw	a5,272(a5)
 1ff525e8:	4401                	li	s0,0
 1ff525ea:	04f5f463          	bgeu	a1,a5,1ff52632 <set_intent_output.constprop.0+0x80>
@@ -1955,7 +1955,7 @@ Disassembly of section .text:
 1ff526a2:	4789                	li	a5,2
 1ff526a4:	0ef59c63          	bne	a1,a5,1ff5279c <set_intent_output.constprop.0+0x1ea>
 1ff526a8:	1ff517b7          	lui	a5,0x1ff51
-1ff526ac:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff526ac:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff526b0:	1107a783          	lw	a5,272(a5)
 1ff526b4:	4401                	li	s0,0
 1ff526b6:	f6f5fee3          	bgeu	a1,a5,1ff52632 <set_intent_output.constprop.0+0x80>
@@ -2041,7 +2041,7 @@ Disassembly of section .text:
 1ff5279e:	4401                	li	s0,0
 1ff527a0:	e8f599e3          	bne	a1,a5,1ff52632 <set_intent_output.constprop.0+0x80>
 1ff527a4:	1ff517b7          	lui	a5,0x1ff51
-1ff527a8:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff527a8:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff527ac:	1107a783          	lw	a5,272(a5)
 1ff527b0:	e8f5f1e3          	bgeu	a1,a5,1ff52632 <set_intent_output.constprop.0+0x80>
 1ff527b4:	37c18793          	addi	a5,gp,892 # 1ff67bbc <info>
@@ -5599,7 +5599,7 @@ Disassembly of section .text:
 1ff550b6:	00072023          	sw	zero,0(a4) # e2000000 <ICACHE_ALIAS_ADDR+0xe2000001>
 1ff550ba:	1ff517b7          	lui	a5,0x1ff51
 1ff550be:	00072223          	sw	zero,4(a4)
-1ff550c2:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff550c2:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff550c6:	4308                	lw	a0,0(a4)
 1ff550c8:	434c                	lw	a1,4(a4)
 1ff550ca:	4f9c                	lw	a5,24(a5)
@@ -5857,7 +5857,7 @@ Disassembly of section .text:
 1ff553ce:	47a2                	lw	a5,8(sp)
 1ff553d0:	fef69ae3          	bne	a3,a5,1ff553c4 <vPortSysTickHandler+0x10>
 1ff553d4:	1ff517b7          	lui	a5,0x1ff51
-1ff553d8:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff553d8:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff553dc:	4622                	lw	a2,8(sp)
 1ff553de:	46b2                	lw	a3,12(sp)
 1ff553e0:	4f9c                	lw	a5,24(a5)
@@ -6345,7 +6345,7 @@ Disassembly of section .text:
 1ff55946 <pause_asr.constprop.0>:
 1ff55946:	59e0d2ef          	jal	t0,1ff62ee4 <__riscv_save_0>
 1ff5594a:	1ff517b7          	lui	a5,0x1ff51
-1ff5594e:	c0078713          	addi	a4,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff5594e:	c0078713          	addi	a4,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff55952:	08472683          	lw	a3,132(a4) # 10000084 <SRAM_SIZE+0xff7e084>
 1ff55956:	4709                	li	a4,2
 1ff55958:	711d                	addi	sp,sp,-96
@@ -7744,7 +7744,7 @@ Disassembly of section .text:
 1ff569d8:	b0218993          	addi	s3,gp,-1278 # 1ff67342 <intent_status>
 1ff569dc:	4b85                	li	s7,1
 1ff569de:	1ff65c37          	lui	s8,0x1ff65
-1ff569e2:	c00b0b13          	addi	s6,s6,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff569e2:	c00b0b13          	addi	s6,s6,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff569e6:	be819783          	lh	a5,-1048(gp) # 1ff67428 <sg_words_number>
 1ff569ea:	54fa4363          	blt	s4,a5,1ff56f30 <asr_result_callback_nlp.constprop.0+0xe38>
 1ff569ee:	4485                	li	s1,1
@@ -8306,7 +8306,7 @@ Disassembly of section .text:
 1ff570a4:	1ff519b7          	lui	s3,0x1ff51
 1ff570a8:	24a080ef          	jal	ra,1ff5f2f2 <cmd_info_find_command_by_string>
 1ff570ac:	80819483          	lh	s1,-2040(gp) # 1ff67048 <sg_base_confidence>
-1ff570b0:	c0098793          	addi	a5,s3,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff570b0:	c0098793          	addi	a5,s3,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff570b4:	1107ab83          	lw	s7,272(a5)
 1ff570b8:	4785                	li	a5,1
 1ff570ba:	892a                	mv	s2,a0
@@ -9594,7 +9594,7 @@ Disassembly of section .text:
 1ff57fc8:	0007a023          	sw	zero,0(a5)
 1ff57fcc:	0007a223          	sw	zero,4(a5)
 1ff57fd0:	1ff517b7          	lui	a5,0x1ff51
-1ff57fd4:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff57fd4:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff57fd8:	53dc                	lw	a5,36(a5)
 1ff57fda:	cf81                	beqz	a5,1ff57ff2 <decodersys_clear+0xa8>
 1ff57fdc:	1ff6c537          	lui	a0,0x1ff6c
@@ -9643,7 +9643,7 @@ Disassembly of section .text:
 1ff58068:	c119                	beqz	a0,1ff5806e <decoer_create_lm_get_ac_info+0x76>
 1ff5806a:	00992023          	sw	s1,0(s2)
 1ff5806e:	1ff51bb7          	lui	s7,0x1ff51
-1ff58072:	c00b8793          	addi	a5,s7,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff58072:	c00b8793          	addi	a5,s7,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff58076:	10c7a783          	lw	a5,268(a5)
 1ff5807a:	aa81a783          	lw	a5,-1368(gp) # 1ff672e8 <asr_decoder.lto_priv.0>
 1ff5807e:	c00b8b93          	addi	s7,s7,-1024
@@ -11216,7 +11216,7 @@ Disassembly of section .text:
 1ff5936a:	afc18713          	addi	a4,gp,-1284 # 1ff6733c <has_ret_flag>
 1ff5936e:	ca3a                	sw	a4,20(sp)
 1ff59370:	1ff51737          	lui	a4,0x1ff51
-1ff59374:	c0070713          	addi	a4,a4,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff59374:	c0070713          	addi	a4,a4,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff59378:	c83e                	sw	a5,16(sp)
 1ff5937a:	de3a                	sw	a4,60(sp)
 1ff5937c:	4781                	li	a5,0
@@ -11663,7 +11663,7 @@ Disassembly of section .text:
 
 1ff598d4 <get_cha_check>:
 1ff598d4:	1ff517b7          	lui	a5,0x1ff51
-1ff598d8:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff598d8:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff598dc:	10c7a783          	lw	a5,268(a5)
 1ff598e0:	4505                	li	a0,1
 1ff598e2:	8082                	ret
@@ -11700,7 +11700,7 @@ Disassembly of section .text:
 1ff59920:	00f71863          	bne	a4,a5,1ff59930 <other_func_serve_cb+0x16>
 1ff59924:	4158                	lw	a4,4(a0)
 1ff59926:	1ff517b7          	lui	a5,0x1ff51
-1ff5992a:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff5992a:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff5992e:	c31c                	sw	a5,0(a4)
 1ff59930:	4501                	li	a0,0
 1ff59932:	8082                	ret
@@ -12587,7 +12587,7 @@ Disassembly of section .text:
 1ff5a2bc:	8522                	mv	a0,s0
 1ff5a2be:	c6cfa0ef          	jal	ra,1ff5472a <scu_set_div_parameter>
 1ff5a2c2:	1ff517b7          	lui	a5,0x1ff51
-1ff5a2c6:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff5a2c6:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff5a2ca:	47dc                	lw	a5,12(a5)
 1ff5a2cc:	c2418913          	addi	s2,gp,-988 # 1ff67464 <UART_CLK>
 1ff5a2d0:	8385                	srli	a5,a5,0x1
@@ -14033,7 +14033,7 @@ Disassembly of section .text:
 
 1ff5b34a <ciss_set>:
 1ff5b34a:	1ff517b7          	lui	a5,0x1ff51
-1ff5b34e:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff5b34e:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff5b352:	050a                	slli	a0,a0,0x2
 1ff5b354:	953e                	add	a0,a0,a5
 1ff5b356:	411c                	lw	a5,0(a0)
@@ -14335,7 +14335,7 @@ Disassembly of section .text:
 1ff5b6a6:	00644603          	lbu	a2,6(s0)
 1ff5b6aa:	16061363          	bnez	a2,1ff5b810 <cm_config_codec.part.0+0x206>
 1ff5b6ae:	1ff517b7          	lui	a5,0x1ff51
-1ff5b6b2:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff5b6b2:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff5b6b6:	4bdc                	lw	a5,20(a5)
 1ff5b6b8:	d017f7d3          	fcvt.s.wu	fa5,a5
 1ff5b6bc:	409c                	lw	a5,0(s1)
@@ -14442,13 +14442,13 @@ Disassembly of section .text:
 1ff5b810:	4785                	li	a5,1
 1ff5b812:	00f61863          	bne	a2,a5,1ff5b822 <cm_config_codec.part.0+0x218>
 1ff5b816:	1ff517b7          	lui	a5,0x1ff51
-1ff5b81a:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff5b81a:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff5b81e:	43dc                	lw	a5,4(a5)
 1ff5b820:	bd61                	j	1ff5b6b8 <cm_config_codec.part.0+0xae>
 1ff5b822:	4789                	li	a5,2
 1ff5b824:	00f61863          	bne	a2,a5,1ff5b834 <cm_config_codec.part.0+0x22a>
 1ff5b828:	1ff517b7          	lui	a5,0x1ff51
-1ff5b82c:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff5b82c:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff5b830:	479c                	lw	a5,8(a5)
 1ff5b832:	b559                	j	1ff5b6b8 <cm_config_codec.part.0+0xae>
 1ff5b834:	0ff00793          	li	a5,255
@@ -17370,7 +17370,7 @@ Disassembly of section .text:
 1ff5d8dc:	af818793          	addi	a5,gp,-1288 # 1ff67338 <g_prun_count_max.lto_priv.0>
 1ff5d8e0:	bd11                	j	1ff5d6f4 <decoder_rpmsg_serve_cb+0x164>
 1ff5d8e2:	1ff517b7          	lui	a5,0x1ff51
-1ff5d8e6:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff5d8e6:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff5d8ea:	1107a703          	lw	a4,272(a5)
 1ff5d8ee:	4785                	li	a5,1
 1ff5d8f0:	4140                	lw	s0,4(a0)
@@ -17857,7 +17857,7 @@ Disassembly of section .text:
 1ff5de6e:	e3c5                	bnez	a5,1ff5df0e <resume_asr+0xb4>
 1ff5de70:	074052ef          	jal	t0,1ff62ee4 <__riscv_save_0>
 1ff5de74:	1ff517b7          	lui	a5,0x1ff51
-1ff5de78:	c0078713          	addi	a4,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff5de78:	c0078713          	addi	a4,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff5de7c:	08472683          	lw	a3,132(a4)
 1ff5de80:	4709                	li	a4,2
 1ff5de82:	1141                	addi	sp,sp,-16
@@ -18961,7 +18961,7 @@ Disassembly of section .text:
 1ff5ebea:	02e00513          	li	a0,46
 1ff5ebee:	1ff514b7          	lui	s1,0x1ff51
 1ff5ebf2:	f58fc0ef          	jal	ra,1ff5b34a <ciss_set>
-1ff5ebf6:	c0048493          	addi	s1,s1,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff5ebf6:	c0048493          	addi	s1,s1,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff5ebfa:	1ff66437          	lui	s0,0x1ff66
 1ff5ebfe:	40bc                	lw	a5,64(s1)
 1ff5ec00:	18078a63          	beqz	a5,1ff5ed94 <audio_in_manage_inner_task+0x1b2>
@@ -19632,7 +19632,7 @@ Disassembly of section .text:
 1ff5f39e:	317032ef          	jal	t0,1ff62eb4 <__riscv_save_12>
 1ff5f3a2:	aa81a703          	lw	a4,-1368(gp) # 1ff672e8 <asr_decoder.lto_priv.0>
 1ff5f3a6:	1ff51937          	lui	s2,0x1ff51
-1ff5f3aa:	c0090793          	addi	a5,s2,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff5f3aa:	c0090793          	addi	a5,s2,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff5f3ae:	4304                	lw	s1,0(a4)
 1ff5f3b0:	10c7a783          	lw	a5,268(a5)
 1ff5f3b4:	7179                	addi	sp,sp,-48
@@ -20528,7 +20528,7 @@ Disassembly of section .text:
 1ff5feea:	1ff51a37          	lui	s4,0x1ff51
 1ff5feee:	1ff665b7          	lui	a1,0x1ff66
 1ff5fef2:	f6858593          	addi	a1,a1,-152 # 1ff65f68 <__func__.5642+0x8f8>
-1ff5fef6:	a00a0513          	addi	a0,s4,-1536 # 1ff50a00 <BOOT_PARAMETER_ADDR>
+1ff5fef6:	a00a0513          	addi	a0,s4,-1536 # 1ff50a00 <partition_table_from_boot>
 1ff5fefa:	0ed020ef          	jal	ra,1ff627e6 <__wrap_strcmp>
 1ff5fefe:	c911                	beqz	a0,1ff5ff12 <task_init+0x6d0>
 1ff5ff00:	11600613          	li	a2,278
@@ -23470,7 +23470,7 @@ Disassembly of section .text:
 
 1ff622e2 <get_src_clk>:
 1ff622e2:	1ff517b7          	lui	a5,0x1ff51
-1ff622e6:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff622e6:	c0078793          	addi	a5,a5,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff622ea:	4788                	lw	a0,8(a5)
 1ff622ec:	8082                	ret
 
@@ -23608,7 +23608,7 @@ Disassembly of section .text:
 1ff6239e:	1ff51537          	lui	a0,0x1ff51
 1ff623a2:	40000613          	li	a2,1024
 1ff623a6:	4581                	li	a1,0
-1ff623a8:	c0050513          	addi	a0,a0,-1024 # 1ff50c00 <SHARE_SRAM_ADDR>
+1ff623a8:	c0050513          	addi	a0,a0,-1024 # 1ff50c00 <status_list.lto_priv.0>
 1ff623ac:	2929                	jal	1ff627c6 <__wrap_memset>
 1ff623ae:	40030437          	lui	s0,0x40030
 1ff623b2:	10042783          	lw	a5,256(s0) # 40030100 <CHIP_SRAM_END_ADDR+0x20038100>
@@ -24949,7 +24949,7 @@ Disassembly of section .text:
 1ff63130:	0177e7b3          	or	a5,a5,s7
 1ff63134:	00e7fc63          	bgeu	a5,a4,1ff6314c <__divdf3+0x238>
 1ff63138:	97c2                	add	a5,a5,a6
-1ff6313a:	fff30f93          	addi	t6,t1,-1 # 1ff50fff <SHARE_SRAM_ADDR+0x3ff>
+1ff6313a:	fff30f93          	addi	t6,t1,-1 # 1ff50fff <status_list.lto_priv.0+0x3ff>
 1ff6313e:	0107e763          	bltu	a5,a6,1ff6314c <__divdf3+0x238>
 1ff63142:	00e7f563          	bgeu	a5,a4,1ff6314c <__divdf3+0x238>
 1ff63146:	ffe30f93          	addi	t6,t1,-2
