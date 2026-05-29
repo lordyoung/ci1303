@@ -27,7 +27,9 @@
 #include "ci130x_iwdg.h"
 #include "ci_flash_data_info.h"
 #include "user_config.h"
-
+#if USE_MFCC_DTW_SPK
+#include "mfcc_dtw_spk.h"
+#endif
 /**************************************************************************
                     typedef
 ****************************************************************************/
@@ -105,6 +107,18 @@ void set_ssp_registe(audio_capture_t* audio_capture, ci_ssp_st* ci_ssp, int modu
 //语音处理完一帧的回调函数，里面的执行过程一定要尽可能短
 void audio_deal_one_frm_callback(void* para)
 {
+    //语音处理完一帧的回调函数，里面的执行过程一定要尽可能短
+void audio_deal_one_frm_callback(void* para)
+{
+#if USE_MFCC_DTW_SPK
+    /* 每帧把 PCM 喂给说话人识别模块的环形缓冲区
+       para[0] = 音频数据地址, para[1] = short 采样点数 */
+    {
+        uint32_t *spk_d = (uint32_t *)para;
+        spk_feed_pcm((const short *)spk_d[0], (int)spk_d[1]);
+    }
+#endif
+
     #if VOICE_UPLOAD_BY_UART
     uint32_t *data = (uint32_t *)para; //data[0] = 音频数据地址  data[1] = 音频数据个数， 10ms， 256个short数据
     int8_t *pcm_data = (int8_t *)data[0];

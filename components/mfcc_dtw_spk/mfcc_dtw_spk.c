@@ -17,17 +17,18 @@ typedef struct { int n_pcm_samples; } spk_msg_t;
 
 /* ── large static buffers (BSS, not stack) ─────────────────────────────────── */
 
-static short s_pcm_copy[SPK_PCM_BUF_SAMPLES];
+static short s_ring[SPK_PCM_BUF_SAMPLES];     /* capture ring buffer (fed every frame) */
+static short s_pcm_copy[SPK_PCM_BUF_SAMPLES]; /* linear snapshot handed to spk_task    */
 static float s_mfcc_buf[SPK_MAX_TEMPLATE_FRAMES][SPK_N_MFCC_BASE];
 static float s_feat_buf[SPK_MAX_TEMPLATE_FRAMES][SPK_FEAT_DIM];
 static float s_template[SPK_MAX_TEMPLATE_FRAMES][SPK_FEAT_DIM];
 
-/* ── ring buffer snapshot (written from ISR/callback context) ──────────────── */
+/* ── ring buffer write state (written from BNPU frame callback context) ────── */
 
-static volatile uint32_t s_rb_vad_start = 0;
-static volatile uint32_t s_rb_buf_base  = 0;
-static volatile uint32_t s_rb_buf_end   = 0;
-static volatile int      s_rb_frm_shift = 160;   /* ASR FE frame shift in samples */
+static volatile uint32_t s_ring_w     = 0;    /* next write index [0, SPK_PCM_BUF_SAMPLES) */
+static volatile uint32_t s_ring_count = 0;    /* total samples buffered, saturates at cap  */
+static int               s_frm_shift  = 160;  /* ASR FE frame shift in samples             */
+static int               s_feed_dbg   = 0;
 
 /* ── state ─────────────────────────────────────────────────────────────────── */
 
@@ -38,36 +39,49 @@ static spk_verify_cb_t s_verify_cb       = NULL;
 static spk_enroll_cb_t s_enroll_cb       = NULL;
 static QueueHandle_t   s_queue           = NULL;
 
-/* ── ring buffer linear copy ───────────────────────────────────────────────── */
+/* ── PCM capture: called every audio frame from audio_deal_one_frm_callback ── */
 
+void spk_feed_pcm(const short *pcm, int n)
+{
+    if (!pcm || n <= 0 || s_state == SPK_ST_IDLE)
+        return;
+
+    if (s_feed_dbg < 5) {
+        mprintf("[SPK] feed pcm addr=0x%x n=%d\n",
+                (unsigned)(uintptr_t)pcm, n);
+        s_feed_dbg++;
+    }
+
+    /* If a single frame somehow exceeds the buffer, keep only its tail */
+    if (n > (int)SPK_PCM_BUF_SAMPLES) {
+        pcm += (n - (int)SPK_PCM_BUF_SAMPLES);
+        n    = (int)SPK_PCM_BUF_SAMPLES;
+    }
+
+    uint32_t w     = s_ring_w;
+    int      first = (int)(SPK_PCM_BUF_SAMPLES - w);
+    if (first > n) first = n;
+    memcpy(&s_ring[w], pcm, (size_t)first * sizeof(short));
+    int rem = n - first;
+    if (rem > 0)
+        memcpy(&s_ring[0], pcm + first, (size_t)rem * sizeof(short));
+
+    w += (uint32_t)n;
+    if (w >= SPK_PCM_BUF_SAMPLES) w -= SPK_PCM_BUF_SAMPLES;
+    s_ring_w = w;
+
+    uint32_t c = s_ring_count + (uint32_t)n;
+    s_ring_count = (c > SPK_PCM_BUF_SAMPLES) ? SPK_PCM_BUF_SAMPLES : c;
+}
+
+/* Back-compat shim: old VAD callbacks still call this. We no longer rely on the
+ * ASR ring buffer bounds (unavailable in pure command-word mode); we only pick
+ * up the frame shift if a valid one is offered. */
 void spk_ringbuf_snapshot(uint32_t vad_start, uint32_t buf_base,
                            uint32_t buf_end, int frm_shift)
 {
-    s_rb_vad_start = vad_start;
-    s_rb_buf_base  = buf_base;
-    s_rb_buf_end   = buf_end;
-    s_rb_frm_shift = frm_shift;
-}
-
-static int copy_from_ringbuf(uint32_t start, uint32_t base, uint32_t end,
-                              int n_samples, short *dst)
-{
-    if (!start || !base || end <= base) return -1;
-    if (start < base || start >= end)  return -1;
-
-    uint32_t src      = start;
-    int      remaining = n_samples;
-
-    while (remaining > 0) {
-        int avail = (int)((end - src) / sizeof(short));
-        int chunk = (remaining < avail) ? remaining : avail;
-        memcpy(dst, (const void *)src, (size_t)(chunk * sizeof(short)));
-        dst       += chunk;
-        remaining -= chunk;
-        src       += (uint32_t)(chunk * sizeof(short));
-        if (src >= end) src = base;
-    }
-    return 0;
+    (void)vad_start; (void)buf_base; (void)buf_end;
+    if (frm_shift > 0) s_frm_shift = frm_shift;
 }
 
 /* ── utterance processing (runs in spk_task) ───────────────────────────────── */
@@ -161,7 +175,12 @@ int spk_init(spk_verify_cb_t verify_cb)
 {
     feat_init();
     s_verify_cb = verify_cb;
-    s_state     = SPK_ST_VERIFY;
+
+    /* Pull the real ASR frame shift from the ASR system if available */
+    extern int get_asrtop_asrfrmshift(void);
+    int fs = get_asrtop_asrfrmshift();
+    if (fs > 0) s_frm_shift = fs;
+    mprintf("[SPK] frm_shift=%d\n", s_frm_shift);
 
     if (spk_tpl_load(s_template, &s_template_frames) == 0)
         mprintf("[SPK] template loaded: %d frames\n", s_template_frames);
@@ -170,6 +189,9 @@ int spk_init(spk_verify_cb_t verify_cb)
 
     s_queue = xQueueCreate(4, sizeof(spk_msg_t));
     xTaskCreate(spk_task, "spk", 1024, NULL, 3, NULL);
+
+    /* Start capturing PCM right away */
+    s_state = SPK_ST_VERIFY;
     return 0;
 }
 
@@ -196,23 +218,33 @@ int spk_process(int n_asr_frames)
 {
     if (n_asr_frames <= 0 || s_state == SPK_ST_IDLE || !s_queue) return -1;
 
-    int n_samples = n_asr_frames * (int)s_rb_frm_shift;
-    if (n_samples > SPK_PCM_BUF_SAMPLES)
-        n_samples = SPK_PCM_BUF_SAMPLES;
+    int n_samples = n_asr_frames * s_frm_shift;
+    if (n_samples > (int)SPK_PCM_BUF_SAMPLES)
+        n_samples = (int)SPK_PCM_BUF_SAMPLES;
 
-    mprintf("[SPK] process frm=%d shift=%d -> %d samples\n",
-            n_asr_frames, (int)s_rb_frm_shift, n_samples);
+    /* Snapshot the current write head and how much is buffered */
+    uint32_t w     = s_ring_w;
+    uint32_t avail = s_ring_count;
+    if ((uint32_t)n_samples > avail)
+        n_samples = (int)avail;
 
-    if (copy_from_ringbuf((uint32_t)s_rb_vad_start,
-                          (uint32_t)s_rb_buf_base,
-                          (uint32_t)s_rb_buf_end,
-                          n_samples, s_pcm_copy) != 0) {
-        mprintf("[SPK] ring copy failed (vad=0x%x base=0x%x end=0x%x)\n",
-                (unsigned)s_rb_vad_start,
-                (unsigned)s_rb_buf_base,
-                (unsigned)s_rb_buf_end);
+    mprintf("[SPK] process frm=%d shift=%d -> %d samples (avail=%u)\n",
+            n_asr_frames, s_frm_shift, n_samples, (unsigned)avail);
+
+    if (n_samples < SPK_FRAME_LEN) {
+        mprintf("[SPK] not enough pcm captured (%d)\n", n_samples);
         return -1;
     }
+
+    /* Copy the most recent n_samples (in time order) out of the ring buffer */
+    int start = (int)w - n_samples;
+    if (start < 0) start += (int)SPK_PCM_BUF_SAMPLES;
+    int first = (int)SPK_PCM_BUF_SAMPLES - start;
+    if (first > n_samples) first = n_samples;
+    memcpy(s_pcm_copy, &s_ring[start], (size_t)first * sizeof(short));
+    if (n_samples > first)
+        memcpy(s_pcm_copy + first, &s_ring[0],
+               (size_t)(n_samples - first) * sizeof(short));
 
     spk_msg_t msg = { n_samples };
     if (xQueueSend(s_queue, &msg, 0) != pdTRUE) {

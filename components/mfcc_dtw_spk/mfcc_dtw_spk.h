@@ -28,11 +28,15 @@ int spk_start_enroll(spk_enroll_cb_t enroll_cb);
 /* Erase stored template */
 int spk_delete_template(void);
 
-/* Called from vadstart_callback — saves ring buffer position & bounds */
+/* Back-compat shim called from vadstart_callback (no longer relied upon) */
 void spk_ringbuf_snapshot(uint32_t vad_start_addr, uint32_t buf_base,
                            uint32_t buf_end, int frm_shift_samples);
 
-/* Called from asr_result_callback — copies PCM from ring buf, signals task */
+/* Called every audio frame (from audio_deal_one_frm_callback) to capture PCM
+ * into the internal ring buffer. pcm = int16 samples, n = sample count. */
+void spk_feed_pcm(const short *pcm, int n);
+
+/* Called from asr_result_callback — slices the captured PCM, signals the task */
 int spk_process(int n_asr_frames);
 
 #endif

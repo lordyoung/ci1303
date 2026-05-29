@@ -56,7 +56,8 @@ build/objs/audio_in_manage_inner.o: \
  ../../../system/romlib_runtime.h \
  ../../../components/audio_in_manage/alg_preprocess.h \
  ../../../driver/ci130x_chip_driver/inc/ci130x_iwdg.h \
- ../../../components/flash_control/flash_control_inc/ci_flash_data_info.h
+ ../../../components/flash_control/flash_control_inc/ci_flash_data_info.h \
+ ../../../components/mfcc_dtw_spk/mfcc_dtw_spk.h
 
 ../../../components/codec_manager/codec_manage_inner_port.h:
 
@@ -175,3 +176,5 @@ build/objs/audio_in_manage_inner.o: \
 ../../../driver/ci130x_chip_driver/inc/ci130x_iwdg.h:
 
 ../../../components/flash_control/flash_control_inc/ci_flash_data_info.h:
+
+../../../components/mfcc_dtw_spk/mfcc_dtw_spk.h:

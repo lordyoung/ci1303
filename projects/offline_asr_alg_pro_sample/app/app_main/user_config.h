@@ -411,7 +411,7 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #define SPK_ENROLL_TIMES            3
 #define SPK_DTW_THRESHOLD_X1000     650
 #define SPK_DTW_BAND_RATIO_X100     20
-#define SPK_PCM_BUF_SIZE            (32*1024)
+#define SPK_PCM_BUF_SIZE            (24*1024)
 #define SPK_MAX_TEMPLATE_FRAMES     80
 #define SPK_DEBUG                   1
 #define NVDATA_ID_SPK_BASE          0x60100000u
