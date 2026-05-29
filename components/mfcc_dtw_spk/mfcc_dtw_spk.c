@@ -85,12 +85,27 @@ void spk_ringbuf_snapshot(uint32_t vad_start, uint32_t buf_base,
 }
 
 /* ── utterance processing (runs in spk_task) ───────────────────────────────── */
-
 static void process_utterance(int n_pcm_samples)
 {
+    /* Print 17: PCM energy check */
+    {
+        long long sum = 0;
+        for (int i = 0; i < n_pcm_samples; i++) {
+            int s = s_pcm_copy[i];
+            sum += (s < 0) ? -s : s;
+        }
+        int energy = (int)(sum / n_pcm_samples);
+        mprintf("[SPK] pcm energy=%d n=%d%s\n", energy, n_pcm_samples,
+                energy < 200 ? " WARN:quiet" : "");
+    }
+
     /* 1. MFCC */
     int n_feat = feat_extract_mfcc(s_pcm_copy, n_pcm_samples,
                                    s_mfcc_buf, SPK_MAX_TEMPLATE_FRAMES);
+
+    /* Print 16: feat_frames adequacy */
+    mprintf("[SPK] feat_frm=%d%s\n", n_feat, n_feat < 20 ? " WARN:short" : "");
+
     if (n_feat < 4) {
         mprintf("[SPK] too few frames: %d\n", n_feat);
         if (s_state == SPK_ST_ENROLL && s_enroll_cb)
@@ -98,7 +113,7 @@ static void process_utterance(int n_pcm_samples)
         return;
     }
 
-    /* 2. CMN + delta → 39-dim */
+    /* 2. CMN + delta -> 39-dim */
     feat_apply_cmn(s_mfcc_buf, n_feat);
     feat_pack_with_delta((const float (*)[SPK_N_MFCC_BASE])s_mfcc_buf,
                          n_feat, s_feat_buf);
@@ -147,8 +162,11 @@ static void process_utterance(int n_pcm_samples)
         int dist = dtw_match((const float *)s_feat_buf, n_feat,
                              (const float *)s_template, s_template_frames,
                              SPK_FEAT_DIM, SPK_DTW_BAND_RATIO_X100);
-        mprintf("[SPK] DTW dist*1000=%d thr=%d -> %s\n",
-                dist, SPK_DTW_THRESHOLD_X1000,
+
+        /* Print 19: dist + margin for threshold tuning */
+        int margin = SPK_DTW_THRESHOLD_X1000 - dist;
+        mprintf("[SPK] DTW dist*1000=%d thr=%d margin=%d -> %s\n",
+                dist, SPK_DTW_THRESHOLD_X1000, margin,
                 (dist >= 0 && dist <= SPK_DTW_THRESHOLD_X1000) ? "ACCEPT" : "REJECT");
 
         spk_result_t r = (dist >= 0 && dist <= SPK_DTW_THRESHOLD_X1000)
@@ -156,7 +174,6 @@ static void process_utterance(int n_pcm_samples)
         if (s_verify_cb) s_verify_cb(r, dist);
     }
 }
-
 /* ── FreeRTOS task ─────────────────────────────────────────────────────────── */
 
 static void spk_task(void *p)

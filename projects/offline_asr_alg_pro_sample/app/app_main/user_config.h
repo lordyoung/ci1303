@@ -419,3 +419,8 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #define NVDATA_ID_SPK_TEMPLATE_META (NVDATA_ID_SPK_BASE + 1u)
 #define NVDATA_ID_SPK_THRESHOLD     (NVDATA_ID_SPK_BASE + 2u)
 #endif /* _USER_CONFIG_H_ */
+
+/* M4: door GPIO control */
+#define SPK_DOOR_GPIO_BASE      PA       /* 根据实际接线修改：PA/PB/PC/PD */
+#define SPK_DOOR_GPIO_PIN       pin_0    /* 根据实际接线修改：pin_0..pin_7 */
+#define SPK_DOOR_OPEN_MS        3000     /* 开门后保持时间(ms) */
