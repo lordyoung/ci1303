@@ -88,6 +88,8 @@ source-file: components/mfcc_dtw_spk/feat_extract.c
 source-file: components/mfcc_dtw_spk/feat_postproc.c
 source-file: components/mfcc_dtw_spk/dtw_match.c
 source-file: components/mfcc_dtw_spk/spk_template_store.c
+source-file: components/mfcc_dtw_spk/spk_fft.c
+include-path: components/mfcc_dtw_spk
 source-file: components/codec_manager/codec_manager.c
 source-file: components/codec_manager/codec_manage_inner_port.c
 
@@ -313,10 +315,4 @@ include-path: components/tts/front_end3
 include-path: components/tts/vocoder
 include-path: components/tts/ringbuffer
 
-// MFCC+DTW Speaker Recognition
-source-file: components/mfcc_dtw_spk/mfcc_dtw_spk.c
-source-file: components/mfcc_dtw_spk/feat_extract.c
-source-file: components/mfcc_dtw_spk/feat_postproc.c
-source-file: components/mfcc_dtw_spk/dtw_match.c
-source-file: components/mfcc_dtw_spk/spk_template_store.c
-include-path: components/mfcc_dtw_spk
+
