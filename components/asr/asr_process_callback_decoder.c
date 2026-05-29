@@ -13,7 +13,7 @@
   */
 #include <stdlib.h>
 #include <stdio.h>
-#include "mfcc_dtw_spk.h"
+
 #include "sdk_default_config.h"
 #include "platform_config.h"
 #include "ci_log_config.h"
@@ -27,6 +27,7 @@
 #if USE_MFCC_DTW_SPK
 #include "mfcc_dtw_spk.h"
 #endif
+
 int nlp_cmd_cnt_default()
 {
     return NLP_CMD_CNT_DEFAULT;
@@ -94,16 +95,6 @@ int asr_result_callback(callback_asr_result_type_t *asr)
     #if USE_VPR || USE_WMAN_VPR
     extern void get_asr_start_end_frm(int start,int valid);
     get_asr_start_end_frm(asr->voice_start_frame,asr->vocie_valid_frame_len);
-        /* === 新增：MFCC+DTW 说话人验证 === */
-    #if USE_MFCC_DTW_SPK
-    if (asr->cmd_handle != (cmd_handle_t)INVALID_HANDLE
-        && asr->vocie_valid_frame_len > 0) {
-        spk_verify(asr->asrvoice_ptr,
-                   asr->voice_start_frame,
-                   asr->vocie_valid_frame_len);
-    }
-    #endif
-    /* === 新增结束 === */
     #endif
 #if (!DEBUG_ASR_NOT_PLAY)
     if (INVALID_HANDLE != asr->cmd_handle)
@@ -131,26 +122,22 @@ int asr_result_callback(callback_asr_result_type_t *asr)
         #endif
     #endif
         #if USE_PWK
-        //mprintf("--asr->voice_start_frame = %d\r\n", asr->voice_start_frame);
-        //mprintf("--asr->vocie_valid_frame_len = %d\r\n", asr->vocie_valid_frame_len);
         ciss_set(CI_SS_WAKE_UP_START_INDEX_FOR_PWK,  asr->voice_start_frame);
         ciss_set(CI_SS_WAKE_UP_VALID_FRAME_LEN_FOR_PWK,  asr->vocie_valid_frame_len);
         #endif
         #if (MULT_INTENT < 2)    
-            #if USE_AI_DOA&&USE_AEC_MODULE   //必须放在发系统消息之前，
+            #if USE_AI_DOA&&USE_AEC_MODULE
             #if USE_CWSL
-            if (!ciss_get(CI_SS_CWSL_IN_REG))  //学习状态不进行doa流程
+            if (!ciss_get(CI_SS_CWSL_IN_REG))
             #endif
             {
                 if (CI_SS_PLAY_STATE_PLAYING != ciss_get(CI_SS_PLAY_STATE))
                 {
-                    //mprintf("--asr->voice_start_frame = %d\r\n", asr->voice_start_frame);
-                    //mprintf("asr->vocie_valid_frame_len = %d\r\n", asr->vocie_valid_frame_len);
                     ciss_set(CI_SS_WAKE_UP_START_INDEX_FOR_DOA,  asr->voice_start_frame);
                     ciss_set(CI_SS_WAKE_UP_VALID_FRAME_LEN_FOR_DOA,  asr->vocie_valid_frame_len);
                     ciss_set(CI_SS_ALG_DOA_IS_BUSYING, 1);
                     int m_try_count = 200;
-                    while(m_try_count--)  //最多延迟1S
+                    while(m_try_count--)
                     {
                         if(ciss_get(CI_SS_ALG_DOA_IS_BUSYING))
                         {
@@ -164,10 +151,8 @@ int asr_result_callback(callback_asr_result_type_t *asr)
                 }
             }
             #elif USE_AI_DOA
-            // mprintf("asr->voice_start_frame = %d\r\n", asr->voice_start_frame);
-            // mprintf("asr->vocie_valid_frame_len = %d\r\n", asr->vocie_valid_frame_len);
             #if USE_CWSL
-                if (!ciss_get(CI_SS_CWSL_IN_REG))  //学习状态不进行doa流程
+                if (!ciss_get(CI_SS_CWSL_IN_REG))
             #endif
                 {
                     ciss_set(CI_SS_WAKE_UP_START_INDEX_FOR_DOA,  asr->voice_start_frame);
@@ -176,30 +161,11 @@ int asr_result_callback(callback_asr_result_type_t *asr)
             #endif
         #endif
         #if (MULT_INTENT < 2)
-        mprintf("send result:%s %d\n", asr->cmd_word, asr->confidence);
-        #if USE_MFCC_DTW_SPK
+        mprintf("send result:%s cfd=%d frm=%d\n", asr->cmd_word, asr->confidence, asr->frm);
+#if USE_MFCC_DTW_SPK
         if (asr->frm > 0)
             spk_process(asr->frm);
-        #endif
-        #if USE_MFCC_DTW_SPK
-        {
-            int spk_start = asr->voice_start_frame;
-            int spk_len   = asr->vocie_valid_frame_len;
-            mprintf("[ASR DBG] ptr=0x%x start=%d len=%d frm=%d\n",
-                    asr->asrvoice_ptr, spk_start, spk_len, asr->frm);
-            /* Fallback: ROM only fills voice_start/valid_frame_len when VPR/PWK/DOA
-               is enabled. Without those, use asr->frm (total decoded frames). */
-            if (spk_len <= 0) {
-                spk_start = 0;
-                spk_len   = asr->frm;
-            }
-            if (spk_len > 0 && asr->asrvoice_ptr != 0) {
-                spk_verify(asr->asrvoice_ptr, spk_start, spk_len);
-            } else {
-                mprintf("[SPK] no valid PCM info, skip verify\n");
-            }
-        }
-        #endif
+#endif
         sys_msg_t send_msg;
         send_msg.msg_type = SYS_MSG_TYPE_ASR;
         send_msg.msg_data.asr_data.asr_status = MSG_ASR_STATUS_GOOD_RESULT;
@@ -212,12 +178,7 @@ int asr_result_callback(callback_asr_result_type_t *asr)
         send_msg_to_sys_task(&send_msg, NULL);
         ret = 1;
         #else
-        //mprintf("decoded_frames=%d \n", asr->frm);
-        //mprintf("*************sil=%d******** \n", asr->sil_cfd);
-        //mprintf("nlp asr->voice_start_frame = %d\r\n", asr->voice_start_frame);
-       // mprintf("nlp asr->vocie_valid_frame_len = %d\r\n", asr->vocie_valid_frame_len);
         ret = asr_result_callback_nlp(asr->cmd_word, asr->confidence, asr->frm, asr->sil_cfd, asr->path_node_cfd, asr->voice_start_frame, asr->vocie_valid_frame_len);
-        
         #endif
     }
     else
