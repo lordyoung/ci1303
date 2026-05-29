@@ -9,7 +9,7 @@
 #include "spk_template_store.h"
 #include "user_config.h"
 #include "ci_log.h"
-
+ 
 /* ── types ─────────────────────────────────────────────────────────────────── */
 
 typedef enum { SPK_ST_IDLE=0, SPK_ST_ENROLL, SPK_ST_VERIFY } spk_state_t;
