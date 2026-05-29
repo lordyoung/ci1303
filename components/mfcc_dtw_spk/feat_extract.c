@@ -1,7 +1,6 @@
 #include <math.h>
 #include <string.h>
 #include "feat_extract.h"
-#include "ci_fft.h"
 #include "ci_log.h"
 
 #ifndef M_PI
@@ -9,12 +8,15 @@
 #endif
 
 /* Static work buffers — never placed on task stack */
-static float s_hamming[SPK_FRAME_LEN];
+static float s_hamming[SPK_FRAME_LEN];                 /* 512 -> 2KB */
+static float s_tw_re[SPK_FFT_N / 2];                   /* 256 -> 1KB twiddle cos */
+static float s_tw_im[SPK_FFT_N / 2];                   /* 256 -> 1KB twiddle sin */
+static float s_fft_re[SPK_FFT_N];                      /* 512 -> 2KB real work */
+static float s_fft_im[SPK_FFT_N];                      /* 512 -> 2KB imag work */
 static int   s_mel_lower[SPK_N_MEL];
 static int   s_mel_center[SPK_N_MEL];
 static int   s_mel_upper[SPK_N_MEL];
-static float s_dct_cos[SPK_N_MFCC_BASE][SPK_N_MEL];   /* 13 × 26 */
-static float s_fft_buf[SPK_FFT_N];                     /* 256 complex = 512 floats */
+static float s_dct_cos[SPK_N_MFCC_BASE][SPK_N_MEL];    /* 13 × 26 */
 static float s_power[SPK_N_FFT_BINS];                  /* 256 */
 static float s_mel_e[SPK_N_MEL];                       /* 26 */
 static int   s_inited;
@@ -24,6 +26,48 @@ static float mel_to_hz(float mel)
     return 700.0f * (powf(10.0f, mel / 2595.0f) - 1.0f);
 }
 
+/* In-place iterative radix-2 Cooley-Tukey FFT, length SPK_FFT_N (512).
+ * Twiddles precomputed in s_tw_re/s_tw_im. Self-contained — no SDK/ROM FFT. */
+static void fft_512(float *re, float *im)
+{
+    const int n = SPK_FFT_N;
+
+    /* bit-reversal permutation */
+    for (int i = 1, j = 0; i < n; i++) {
+        int bit = n >> 1;
+        for (; j & bit; bit >>= 1)
+            j ^= bit;
+        j ^= bit;
+        if (i < j) {
+            float tr = re[i]; re[i] = re[j]; re[j] = tr;
+            float ti = im[i]; im[i] = im[j]; im[j] = ti;
+        }
+    }
+
+    /* butterflies */
+    for (int len = 2; len <= n; len <<= 1) {
+        int half = len >> 1;
+        int step = n / len;
+        for (int i = 0; i < n; i += len) {
+            for (int k = 0; k < half; k++) {
+                int idx = k * step;
+                float wr = s_tw_re[idx];
+                float wi = s_tw_im[idx];
+                float xr = re[i + k + half];
+                float xi = im[i + k + half];
+                float vr = xr * wr - xi * wi;
+                float vi = xr * wi + xi * wr;
+                float ur = re[i + k];
+                float ui = im[i + k];
+                re[i + k]        = ur + vr;
+                im[i + k]        = ui + vi;
+                re[i + k + half] = ur - vr;
+                im[i + k + half] = ui - vi;
+            }
+        }
+    }
+}
+
 int feat_init(void)
 {
     if (s_inited) return 0;
@@ -31,6 +75,13 @@ int feat_init(void)
     /* Hamming window */
     for (int i = 0; i < SPK_FRAME_LEN; i++)
         s_hamming[i] = 0.54f - 0.46f * cosf(2.0f * M_PI * i / (SPK_FRAME_LEN - 1));
+
+    /* FFT twiddle factors: W_n^i = exp(-j*2*pi*i/n) */
+    for (int i = 0; i < SPK_FFT_N / 2; i++) {
+        float ang = -2.0f * M_PI * i / (float)SPK_FFT_N;
+        s_tw_re[i] = cosf(ang);
+        s_tw_im[i] = sinf(ang);
+    }
 
     /* Mel filterbank: 26 triangular filters, 80–8000 Hz */
     float mel_lo = 2595.0f * log10f(1.0f + 80.0f   / 700.0f);
@@ -56,9 +107,6 @@ int feat_init(void)
         for (int m = 0; m < SPK_N_MEL; m++)
             s_dct_cos[n][m] = cosf(M_PI * (n + 1) * (m + 0.5f) / SPK_N_MEL);
 
-    /* Init SDK FFT (w=512, s=256) */
-    ci_software_fft_w512_s256_init();
-
     s_inited = 1;
     mprintf("[SPK] feat_init done\n");
     return 0;
@@ -74,13 +122,18 @@ int feat_extract_mfcc(const short *pcm, int n_samples,
          off + SPK_FRAME_LEN <= n_samples && n_frames < n_max_frames;
          off += SPK_FRAME_SHIFT, n_frames++) {
 
-        /* SDK FFT: windowed int16 → 256 interleaved complex floats */
-        ci_software_fft_w512_s256(pcm + off, s_hamming, s_fft_buf);
+        /* Apply Hamming window: int16 PCM -> float, zero imaginary */
+        for (int i = 0; i < SPK_FFT_N; i++) {
+            s_fft_re[i] = (float)pcm[off + i] * s_hamming[i];
+            s_fft_im[i] = 0.0f;
+        }
 
-        /* Power spectrum: |X[k]|^2 */
+        fft_512(s_fft_re, s_fft_im);
+
+        /* Power spectrum: |X[k]|^2 for bins 0..255 */
         for (int k = 0; k < SPK_N_FFT_BINS; k++) {
-            float re = s_fft_buf[2 * k];
-            float im = s_fft_buf[2 * k + 1];
+            float re = s_fft_re[k];
+            float im = s_fft_im[k];
             s_power[k] = re * re + im * im;
         }
 
