@@ -175,12 +175,7 @@ int spk_init(spk_verify_cb_t verify_cb)
 {
     feat_init();
     s_verify_cb = verify_cb;
-
-    /* Pull the real ASR frame shift from the ASR system if available */
-    extern int get_asrtop_asrfrmshift(void);
-    int fs = get_asrtop_asrfrmshift();
-    if (fs > 0) s_frm_shift = fs;
-    mprintf("[SPK] frm_shift=%d\n", s_frm_shift);
+    mprintf("[SPK] frm_shift=%d (default)\n", s_frm_shift);
 
     if (spk_tpl_load(s_template, &s_template_frames) == 0)
         mprintf("[SPK] template loaded: %d frames\n", s_template_frames);
