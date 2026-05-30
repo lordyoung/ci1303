@@ -142,7 +142,7 @@ static void process_utterance(int n_pcm_samples)
                     (size_t)sp_len * sizeof(short));
         n_pcm_samples = sp_len;
     }
-    /* Print 17: PCM energy check */
+    /* Print 17: PCM energy check */  
     {
         long long sum = 0;
         for (int i = 0; i < n_pcm_samples; i++) {
