@@ -118,6 +118,24 @@ static void process_utterance(int n_pcm_samples)
                          n_feat, s_feat_buf);
 
     if (s_state == SPK_ST_ENROLL) {
+        /* 注册质量门槛 */
+        {
+            long long sum = 0;
+            for (int i = 0; i < n_pcm_samples; i++) {
+                int s = s_pcm_copy[i]; sum += (s < 0) ? -s : s;
+            }
+            int energy = (int)(sum / n_pcm_samples);
+            int ok = (energy >= SPK_ENROLL_MIN_ENERGY) && (n_feat >= SPK_ENROLL_MIN_FRAMES);
+            mprintf("[SPK] enroll quality: energy=%d frm=%d -> %s\n",
+                    energy, n_feat, ok ? "OK" : "RETRY-say again louder/closer");
+            if (!ok) {
+                if (s_enroll_cb)
+                    s_enroll_cb(SPK_ENROLL_STATE_FAILED, s_enroll_cnt, SPK_ENROLL_TIMES);
+                return;   /* 不计入次数，要求重说 */
+            }
+        }
+
+        
         /* Running average into s_template */
         if (s_enroll_cnt == 0) {
             memcpy(s_template, s_feat_buf,

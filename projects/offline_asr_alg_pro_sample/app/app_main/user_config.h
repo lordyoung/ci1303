@@ -408,7 +408,9 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 
 /* ── MFCC+DTW speaker recognition ─────────────────────────────────────────── */
 #define USE_MFCC_DTW_SPK            1
-#define SPK_ENROLL_TIMES            3
+#define SPK_ENROLL_TIMES            5       /* 原来 3，增加样本量 */
+#define SPK_ENROLL_MIN_ENERGY       150     /* 低于此值拒绝本次注册，要求重说 */
+#define SPK_ENROLL_MIN_FRAMES       15      /* 低于此帧数拒绝本次注册，要求重说 */
 #define SPK_DTW_THRESHOLD_X1000     650
 #define SPK_DTW_BAND_RATIO_X100     20
 #define SPK_PCM_BUF_SIZE            (24*1024)
