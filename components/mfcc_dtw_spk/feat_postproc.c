@@ -1,16 +1,45 @@
 #include "feat_postproc.h"
 #include "user_config.h"
+#include "ci_log.h"        /* 新增这一行 */
 
 /* Intermediate buffer for Δ — static to avoid stack overflow */
 static float s_d1[SPK_MAX_TEMPLATE_FRAMES][SPK_N_MFCC_BASE];
 
-void feat_apply_cmn(float feats[][SPK_N_MFCC_BASE], int n_frames)
+void feat_apply_cmvn(float feats[][SPK_N_MFCC_BASE], int n_frames)
 {
+    /* Step 1: mean subtraction (CMN) */
     for (int d = 0; d < SPK_N_MFCC_BASE; d++) {
         float mean = 0.0f;
         for (int t = 0; t < n_frames; t++) mean += feats[t][d];
         mean /= (float)n_frames;
         for (int t = 0; t < n_frames; t++) feats[t][d] -= mean;
+    }
+
+    /* Step 2: variance normalization (MVN) */
+    for (int d = 0; d < SPK_N_MFCC_BASE; d++) {
+        float var = 0.0f;
+        for (int t = 0; t < n_frames; t++)
+            var += feats[t][d] * feats[t][d];
+        var /= (float)n_frames;
+        float std = sqrtf(var);
+        if (std < 1e-3f) std = 1e-3f;   /* floor: 防止静音帧除以0 */
+        for (int t = 0; t < n_frames; t++)
+            feats[t][d] /= std;
+    }
+
+    /* 验证打印：前两个维度的归一化结果（应接近 mean≈0, std≈1） */
+    {
+        float m0 = 0.0f, v0 = 0.0f, m1 = 0.0f, v1 = 0.0f;
+        for (int t = 0; t < n_frames; t++) {
+            m0 += feats[t][0]; m1 += feats[t][1];
+        }
+        m0 /= n_frames; m1 /= n_frames;
+        for (int t = 0; t < n_frames; t++) {
+            v0 += (feats[t][0]-m0)*(feats[t][0]-m0);
+            v1 += (feats[t][1]-m1)*(feats[t][1]-m1);
+        }
+        mprintf("[SPK] cmvn: mean[0]=%d*0.001 std[0]=%d*0.001\n",
+                (int)(m0 * 1000), (int)(sqrtf(v0 / n_frames) * 1000));
     }
 }
 

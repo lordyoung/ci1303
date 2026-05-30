@@ -5,7 +5,7 @@
 #include "user_config.h"
 #include "ci_log.h"
 
-#define TPL_MAGIC  0x53504B31u   /* 'SPK1' */
+#define TPL_MAGIC  0x53504B32u   /* 'SPK2' — 升级特征维度后必须重新注册 */
 
 typedef struct {
     uint32_t magic;

@@ -7,9 +7,9 @@
 #define SPK_FFT_N           512
 #define SPK_FRAME_LEN       512
 #define SPK_FRAME_SHIFT     256
-#define SPK_N_MEL           26
+#define SPK_N_MEL           40
 #define SPK_N_FFT_BINS      (SPK_FFT_N / 2)   /* 256 complex bins */
-#define SPK_N_MFCC_BASE     13
+#define SPK_N_MFCC_BASE     20
 
 #define SPK_PCM_BUF_SAMPLES (SPK_PCM_BUF_SIZE / sizeof(short))
 

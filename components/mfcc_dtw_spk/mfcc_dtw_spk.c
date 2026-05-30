@@ -114,8 +114,7 @@ static void process_utterance(int n_pcm_samples)
     }
 
     /* 2. CMN + delta -> 39-dim */
-    feat_apply_cmn(s_mfcc_buf, n_feat);
-    feat_pack_with_delta((const float (*)[SPK_N_MFCC_BASE])s_mfcc_buf,
+    feat_apply_cmvn(s_mfcc_buf, n_feat);   /* 原来是 feat_apply_cmn */    feat_pack_with_delta((const float (*)[SPK_N_MFCC_BASE])s_mfcc_buf,
                          n_feat, s_feat_buf);
 
     if (s_state == SPK_ST_ENROLL) {

@@ -108,7 +108,7 @@ int feat_init(void)
             s_dct_cos[n][m] = cosf(M_PI * (n + 1) * (m + 0.5f) / SPK_N_MEL);
 
     s_inited = 1;
-    mprintf("[SPK] feat_init done\n");
+    mprintf("[SPK] feat_init: mel=%d mfcc=%d ",SPK_N_MEL, SPK_N_MFCC_BASE);
     return 0;
 }
 
