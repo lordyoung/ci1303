@@ -84,7 +84,7 @@ int feat_init(void)
     }
 
     /* Mel filterbank: 26 triangular filters, 80–8000 Hz */
-    float mel_lo = 2595.0f * log10f(1.0f + 80.0f   / 700.0f);
+        float mel_lo = 2595.0f * log10f(1.0f + (float)SPK_MEL_LOW_HZ / 700.0f);
     float mel_hi = 2595.0f * log10f(1.0f + 8000.0f / 700.0f);
     int bin_pts[SPK_N_MEL + 2];
     for (int i = 0; i < SPK_N_MEL + 2; i++) {
@@ -123,9 +123,18 @@ int feat_extract_mfcc(const short *pcm, int n_samples,
          off += SPK_FRAME_SHIFT, n_frames++) {
 
         /* Apply Hamming window: int16 PCM -> float, zero imaginary */
-        for (int i = 0; i < SPK_FFT_N; i++) {
-            s_fft_re[i] = (float)pcm[off + i] * s_hamming[i];
-            s_fft_im[i] = 0.0f;
+                /* 预加重(高通)后加汉明窗：int16 PCM -> float，虚部清零。
+         * 预加重 y[n]=x[n]-a*x[n-1] 压低频(风噪)、提高频，是标准MFCC的第一步。 */
+        {
+            const float a = (float)SPK_PREEMPH_X100 / 100.0f;
+            for (int i = 0; i < SPK_FFT_N; i++) {
+                int   idx  = off + i;
+                float cur  = (float)pcm[idx];
+                float prev = (idx > 0) ? (float)pcm[idx - 1] : cur;
+                float pe   = cur - a * prev;
+                s_fft_re[i] = pe * s_hamming[i];
+                s_fft_im[i] = 0.0f;
+            }
         }
 
         fft_512(s_fft_re, s_fft_im);

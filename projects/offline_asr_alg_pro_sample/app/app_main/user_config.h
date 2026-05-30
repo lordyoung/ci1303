@@ -420,6 +420,9 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #define NVDATA_ID_SPK_TEMPLATE      (NVDATA_ID_SPK_BASE + 0u)
 #define NVDATA_ID_SPK_TEMPLATE_META (NVDATA_ID_SPK_BASE + 1u)
 #define NVDATA_ID_SPK_THRESHOLD     (NVDATA_ID_SPK_BASE + 2u)
+/* 风噪抑制（特征层高通） */
+#define SPK_PREEMPH_X100     97     /* 预加重系数×100，y[n]=x[n]-0.97*x[n-1]；设0关闭 */
+#define SPK_MEL_LOW_HZ       250    /* 梅尔滤波器下限频率(Hz)，抬高可抗风噪(原为80) */
 #endif /* _USER_CONFIG_H_ */
 
 /* M4: door GPIO control */
