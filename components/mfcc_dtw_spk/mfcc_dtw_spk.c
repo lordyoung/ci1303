@@ -83,10 +83,65 @@ void spk_ringbuf_snapshot(uint32_t vad_start, uint32_t buf_base,
     (void)vad_start; (void)buf_base; (void)buf_end;
     if (frm_shift > 0) s_frm_shift = frm_shift;
 }
+/* 能量端点检测：在 pcm[0..n) 里定位"最近的一句话"，裁掉前后静音。
+ * 返回裁剪后长度，*p_start 为语音起点偏移。按256采样一窗，从最后一个
+ * 高能量窗往回走，遇到足够长的静音间隔就认为是这句话的开头。 */
+static int spk_endpoint(const short *pcm, int n, int *p_start)
+{
+    const int W = SPK_FRAME_SHIFT;            /* 256 */
+    int nw = n / W;
+    if (nw < 5) { *p_start = 0; return n; }
 
+    static float eng[SPK_PCM_BUF_SAMPLES / SPK_FRAME_SHIFT];
+    float peak = 0.0f, flo = 1e9f;
+    for (int i = 0; i < nw; i++) {
+        long sum = 0;
+        const short *p = pcm + i * W;
+        for (int k = 0; k < W; k++) { int s = p[k]; sum += (s < 0) ? -s : s; }
+        float e = (float)sum / (float)W;
+        eng[i] = e;
+        if (e > peak) peak = e;
+        if (e < flo)  flo  = e;
+    }
+
+    float thr = flo + (peak - flo) * 0.20f;   /* 噪声底 + 20%动态范围 */
+    if (thr < peak * 0.12f) thr = peak * 0.12f;
+
+    /* 终点：最后一个超过阈值的窗 */
+    int last = -1;
+    for (int i = nw - 1; i >= 0; i--) if (eng[i] >= thr) { last = i; break; }
+    if (last < 0) { *p_start = 0; return n; }  /* 全是静音，保留原样 */
+
+    /* 起点：从终点往回走，遇到连续 GAP 个静音窗就停 */
+    const int GAP = 6;                         /* ~96ms 静音视为句子边界 */
+    int first = last, silent = 0;
+    for (int i = last; i >= 0; i--) {
+        if (eng[i] >= thr) { first = i; silent = 0; }
+        else if (++silent >= GAP) break;
+    }
+
+    /* 前后各留 3 窗余量 */
+    first -= 3; if (first < 0)  first = 0;
+    last  += 3; if (last >= nw) last = nw - 1;
+
+    *p_start = first * W;
+    return (last - first + 1) * W;
+}
 /* ── utterance processing (runs in spk_task) ───────────────────────────────── */
 static void process_utterance(int n_pcm_samples)
 {
+        /* 端点检测：裁掉前后静音，把语音段搬到缓冲区开头。
+     * 这样同一句话每次得到的特征长度一致，模板才不会糊。 */
+    {
+        int sp_start = 0;
+        int sp_len = spk_endpoint(s_pcm_copy, n_pcm_samples, &sp_start);
+        mprintf("[SPK] endpoint: raw=%d -> speech=%d start=%d\n",
+                n_pcm_samples, sp_len, sp_start);
+        if (sp_start > 0)
+            memmove(s_pcm_copy, s_pcm_copy + sp_start,
+                    (size_t)sp_len * sizeof(short));
+        n_pcm_samples = sp_len;
+    }
     /* Print 17: PCM energy check */
     {
         long long sum = 0;
@@ -247,15 +302,15 @@ int spk_process(int n_asr_frames)
 {
     if (n_asr_frames <= 0 || s_state == SPK_ST_IDLE || !s_queue) return -1;
 
-    int n_samples = n_asr_frames * s_frm_shift;
-    if (n_samples > (int)SPK_PCM_BUF_SAMPLES)
-        n_samples = (int)SPK_PCM_BUF_SAMPLES;
-
-    /* Snapshot the current write head and how much is buffered */
+        /* ASR 的 frm 对同一句话会乱跳(34~272)，不能用来定长度。
+     * 直接抓取缓冲区里现有的全部音频，交给 process_utterance 里的
+     * 能量端点检测去自动定位真正的语音段。 */
     uint32_t w     = s_ring_w;
     uint32_t avail = s_ring_count;
-    if ((uint32_t)n_samples > avail)
-        n_samples = (int)avail;
+    int n_samples  = (int)avail;
+    if (n_samples > (int)SPK_PCM_BUF_SAMPLES)
+        n_samples = (int)SPK_PCM_BUF_SAMPLES;
+    (void)n_asr_frames;
 
     mprintf("[SPK] process frm=%d shift=%d -> %d samples (avail=%u)\n",
             n_asr_frames, s_frm_shift, n_samples, (unsigned)avail);
