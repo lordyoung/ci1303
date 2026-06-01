@@ -423,6 +423,12 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 /* 风噪抑制（特征层高通） */
 #define SPK_PREEMPH_X100     97     /* 预加重系数×100，y[n]=x[n]-0.97*x[n-1]；设0关闭 */
 #define SPK_MEL_LOW_HZ       300    /* 梅尔滤波器下限频率(Hz)，抬高可抗风噪(原为80) */
+/* ---- 路(3) 谱减法降噪：仅用于说话人识别 MFCC，不影响 ASR ---- */
+#define SPK_SPEC_SUB_ON             1     /* 谱减法总开关：1开 0关（关=退回原行为，便于对比） */
+#define SPK_SPEC_SUB_ALPHA_X100     200   /* 过减系数 α ×100，越大去噪越狠也越失真，典型 150~300 */
+#define SPK_SPEC_SUB_FLOOR_X100     5     /* 谱底系数 β ×100，残留下限防音乐噪声，典型 2~10 */
+#define SPK_SPEC_SUB_NSCALE_X100    150   /* 噪声底缩放 ×100，把每点最小值抬到接近噪声均值，典型 120~200 */
+
 #endif /* _USER_CONFIG_H_ */
 
 /* M4: door GPIO control */

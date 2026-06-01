@@ -19,6 +19,7 @@ static int   s_mel_upper[SPK_N_MEL];
 static float s_dct_cos[SPK_N_MFCC_BASE][SPK_N_MEL];    /* 13 × 26 */
 static float s_power[SPK_N_FFT_BINS];                  /* 256 */
 static float s_mel_e[SPK_N_MEL];                       /* 26 */
+static float s_noise[SPK_N_FFT_BINS];                  /* 256 -> 谱减法噪声底 */
 static int   s_inited;
 
 static float mel_to_hz(float mel)
@@ -67,7 +68,30 @@ static void fft_512(float *re, float *im)
         }
     }
 }
+/* 计算单帧功率谱写入 s_power[]（加窗 + 可选预加重 + FFT + |X|^2） */
+static void frame_power(const short *pcm, int off)
+{
+    for (int i = 0; i < SPK_FFT_N; i++) {
+#ifdef SPK_PREEMPH_X100
+        int   idx  = off + i;
+        float cur  = (float)pcm[idx];
+        float prev = (idx > 0) ? (float)pcm[idx - 1] : cur;
+        float pe   = cur - ((float)SPK_PREEMPH_X100 / 100.0f) * prev;
+        s_fft_re[i] = pe * s_hamming[i];
+#else
+        s_fft_re[i] = (float)pcm[off + i] * s_hamming[i];
+#endif
+        s_fft_im[i] = 0.0f;
+    }
 
+    fft_512(s_fft_re, s_fft_im);
+
+    for (int k = 0; k < SPK_N_FFT_BINS; k++) {
+        float re = s_fft_re[k];
+        float im = s_fft_im[k];
+        s_power[k] = re * re + im * im;
+    }
+}
 int feat_init(void)
 {
     if (s_inited) return 0;
@@ -117,34 +141,59 @@ int feat_extract_mfcc(const short *pcm, int n_samples,
 {
     if (!s_inited) return 0;
 
+#if SPK_SPEC_SUB_ON
+    /* ===== Pass 1：最小值统计，估计每个频点的噪声底 ===== */
+    for (int k = 0; k < SPK_N_FFT_BINS; k++) s_noise[k] = 1e30f;
+
+    int est_frames = 0;
+    for (int off = 0;
+         off + SPK_FRAME_LEN <= n_samples && est_frames < n_max_frames;
+         off += SPK_FRAME_SHIFT, est_frames++) {
+        frame_power(pcm, off);
+        for (int k = 0; k < SPK_N_FFT_BINS; k++)
+            if (s_power[k] < s_noise[k]) s_noise[k] = s_power[k];
+    }
+
+    /* 把每点最小值抬到接近噪声均值，并统计平均噪声电平用于打印 */
+    const float nscale = (float)SPK_SPEC_SUB_NSCALE_X100 / 100.0f;
+    float noise_sum = 0.0f;
+    for (int k = 0; k < SPK_N_FFT_BINS; k++) {
+        s_noise[k] *= nscale;
+        noise_sum  += s_noise[k];
+    }
+    int noise_lvl = (int)(10.0f * log10f(noise_sum / SPK_N_FFT_BINS + 1.0f));
+    /* 【校验打印①】噪声估计是否生效：安静应偏小、风噪应偏大 */
+    mprintf("[SPK] specsub ON: est_frm=%d noise_lvl=%d (10log10)\n",
+            est_frames, noise_lvl);
+
+    const float alpha = (float)SPK_SPEC_SUB_ALPHA_X100 / 100.0f;
+    const float beta  = (float)SPK_SPEC_SUB_FLOOR_X100 / 100.0f;
+    float pre_sum = 0.0f, post_sum = 0.0f;
+#else
+    /* 【校验打印①】确认开关状态 */
+    mprintf("[SPK] specsub OFF\n");
+#endif
+
+    /* ===== Pass 2：逐帧 功率谱→[谱减]→梅尔→DCT ===== */
     int n_frames = 0;
     for (int off = 0;
          off + SPK_FRAME_LEN <= n_samples && n_frames < n_max_frames;
          off += SPK_FRAME_SHIFT, n_frames++) {
 
-        /* Apply Hamming window: int16 PCM -> float, zero imaginary */
-                /* 预加重(高通)后加汉明窗：int16 PCM -> float，虚部清零。
-         * 预加重 y[n]=x[n]-a*x[n-1] 压低频(风噪)、提高频，是标准MFCC的第一步。 */
-        {
-            const float a = (float)SPK_PREEMPH_X100 / 100.0f;
-            for (int i = 0; i < SPK_FFT_N; i++) {
-                int   idx  = off + i;
-                float cur  = (float)pcm[idx];
-                float prev = (idx > 0) ? (float)pcm[idx - 1] : cur;
-                float pe   = cur - a * prev;
-                s_fft_re[i] = pe * s_hamming[i];
-                s_fft_im[i] = 0.0f;
-            }
-        }
+        frame_power(pcm, off);
 
-        fft_512(s_fft_re, s_fft_im);
-
-        /* Power spectrum: |X[k]|^2 for bins 0..255 */
+#if SPK_SPEC_SUB_ON
+        /* 谱减：clean = max(power - α·noise, β·noise) */
         for (int k = 0; k < SPK_N_FFT_BINS; k++) {
-            float re = s_fft_re[k];
-            float im = s_fft_im[k];
-            s_power[k] = re * re + im * im;
+            float p     = s_power[k];
+            float clean = p - alpha * s_noise[k];
+            float fl    = beta * s_noise[k];
+            if (clean < fl) clean = fl;
+            pre_sum  += p;
+            post_sum += clean;
+            s_power[k] = clean;
         }
+#endif
 
         /* Triangular Mel filterbank → log energy */
         for (int m = 0; m < SPK_N_MEL; m++) {
@@ -165,7 +214,7 @@ int feat_extract_mfcc(const short *pcm, int n_samples,
             s_mel_e[m] = logf(e > 1e-6f ? e : 1e-6f);
         }
 
-        /* DCT-II → 13 MFCC coefficients (C1..C13) */
+        /* DCT-II → MFCC coefficients */
         for (int n = 0; n < SPK_N_MFCC_BASE; n++) {
             float c = 0.0f;
             for (int m = 0; m < SPK_N_MEL; m++)
@@ -173,5 +222,14 @@ int feat_extract_mfcc(const short *pcm, int n_samples,
             out[n_frames][n] = c;
         }
     }
+
+#if SPK_SPEC_SUB_ON
+    int reduce_pct = (pre_sum > 1.0f)
+                   ? (int)(100.0f * (pre_sum - post_sum) / pre_sum) : 0;
+    /* 【校验打印②】谱减实际削掉多少功率：安静应小(几%)、风噪应大(几十%) */
+    mprintf("[SPK] specsub: frm=%d pwr_reduce=%d%% (alpha=%d floor=%d)\n",
+            n_frames, reduce_pct, SPK_SPEC_SUB_ALPHA_X100, SPK_SPEC_SUB_FLOOR_X100);
+#endif
+
     return n_frames;
 }
