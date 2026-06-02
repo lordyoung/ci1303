@@ -109,7 +109,7 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #define BAUD_CALIBRATE_MAX_WAIT_TIME    400     // 等待反馈包的超时时间，单位毫秒。
 #endif
 
-//*红外功能配置
+//*红外功能配置 
 #define USE_IR_ENABLE                   0       //红外功能，1:是 0:否。开启红外功能在使用打包工具升级固件时，请取消勾选“升级完成自动运行”，防止重复烧录\
                                                   红外功能涉及多模型切换和红外码库，firmware文件请参考external\firmware参考\ir(红外)\firmware
 #if USE_IR_ENABLE
