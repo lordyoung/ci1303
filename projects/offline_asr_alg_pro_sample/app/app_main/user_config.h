@@ -417,8 +417,11 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
  * 步骤4标定: feat_frames过小则加大,从60起步。仅双芯片模式生效。 */
 #define SPK_DUAL_CHIP_LATENCY_MS    60
 #define SPK_ENROLL_TIMES            3
+#define SPK_ENROLL_MIN_ENERGY       200   /* 平均绝对幅值，拒绝过轻声注册 */
+#define SPK_ENROLL_MIN_FRAMES       15    /* 特征帧下限，约150ms，拒绝截断 */
 #define SPK_DTW_THRESHOLD_X1000     650
 #define SPK_DTW_BAND_RATIO_X100     20
+#define SPK_MEL_LOW_HZ              80
 /* 32KB(单芯片). 双芯片需覆盖"唤醒词时长 + 补偿延迟"回溯窗口, 扩到40KB(=20480 samples).
  * s_ring 与 s_pcm_copy 各占此大小, 共增 +16KB BSS(SRAM余量充足, 见反思核算). */
 #define SPK_PCM_BUF_SIZE            (40*1024)
@@ -440,7 +443,7 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #endif
 
 #endif /* _USER_CONFIG_H_ */
-#endif /* _USER_CONFIG_H_ */
+
 
 /* M4: door GPIO control */
 #define SPK_DOOR_GPIO_BASE      PA       /* 根据实际接线修改：PA/PB/PC/PD */
