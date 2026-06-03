@@ -597,3 +597,58 @@ void audio_pre_rslt_out_codec_init_pa_out(void)
     
     cm_config_codec(PLAY_CODEC_ID, CODEC_OUTPUT, &pre_rslt_out_sound_info);
 }
+#if SPK_USE_DUAL_CHIP_DENOISE
+/*********************** 双芯片NN降噪: IIS0 SLAVE 接收配置 ************************/
+/**
+ * @brief IIS0 SLAVE 输入 codec 配置, 接收 CI1306(MASTER) 降噪后 PCM。
+ * @note  mclk_out_en / scklrck_out_en 两项为待实测矫正项:
+ *        若步骤3实测 peak=0(收不到数据), 按 MODENULL / IN / OUT 逐项调整,
+ *        以 peak 能稳定 >1000 为通过标准, 并记录最终正确值。
+ */
+static const cm_codec_hw_info_t spk_iis0_slave_hw_info =
+{
+    .IICx = IIC_NULL,
+    .input_iis.IISx             = IIS0,
+    .input_iis.iis_mode_sel     = IIS_SLAVE,        /* CI1306为MASTER, 本片为SLAVE */
+    .input_iis.over_sample      = IIS_MCLK_FS_256,
+    .input_iis.clk_source       = AUDIO_PLAY_CLK_SOURCE_OSC_OR_INEER_RC,
+    .input_iis.mclk_out_en      = IIS_MCLK_IN,      /* 接收CI1306的MCLK (待实测矫正) */
+    .input_iis.iis_data_format  = IIS_DF_IIS,
+    .input_iis.sck_lrck_ratio   = IIS_SCK_LRCK_64,
+    .input_iis.rx_cha           = IIS_RX_CHANNAL_RX0,
+    .input_iis.outside_mclk_fre = 0,
+    .input_iis.scklrck_out_en   = IIS_SCKLRCK_MODENULL, /* SCK/LRCK由CI1306驱动 (待实测矫正) */
+};
+
+static const cm_sound_info_t spk_iis0_sound_info =
+{
+    .sample_rate  = 16000,
+    .channel_flag = 1,              /* 单声道: CI1306降噪输出DST1 */
+    .sample_depth = IIS_DW_16BIT,
+};
+
+void spk_iis0_slave_codec_registe(void)
+{
+    /* IIS0 SLAVE 引脚, 覆盖 UART1(PA2/PA3)+UART2(PA5/PA6) 的 pad 设置。
+     * 阶段一已置 MSG_COM_USE_UART_EN=0, 协议串口停用, 无冲突。 */
+    dpmu_set_io_reuse(PA2, SECOND_FUNCTION);   /* IIS0 SDI  */
+    dpmu_set_io_reuse(PA3, SECOND_FUNCTION);   /* IIS0 LRCK */
+    dpmu_set_io_reuse(PA5, SECOND_FUNCTION);   /* IIS0 SCLK */
+    dpmu_set_io_reuse(PA6, SECOND_FUNCTION);   /* IIS0 MCLK */
+    mprintf("[SPK] IIS0 slave pads set: PA2/3/5/6 -> SECOND_FUNCTION\n");
+
+    cm_reg_codec(REF_RECORD_CODEC_ID, (cm_codec_hw_info_t*)&spk_iis0_slave_hw_info);
+
+    uint32_t block_size = AUDIO_CAP_POINT_NUM_PER_FRM * sizeof(int16_t);
+    cm_pcm_buffer_info_t buf;
+    buf.record_buffer_info.block_num   = AUDIO_IN_BUFFER_NUM;
+    buf.record_buffer_info.block_size  = block_size;
+    buf.record_buffer_info.buffer_size = buf.record_buffer_info.block_size * buf.record_buffer_info.block_num;
+    buf.record_buffer_info.pcm_buffer  = (void*)pvPortMalloc(buf.record_buffer_info.buffer_size);
+    CI_ASSERT(buf.record_buffer_info.pcm_buffer, "spk iis0 buf malloc fail\n");
+    cm_config_pcm_buffer(REF_RECORD_CODEC_ID, CODEC_INPUT, &buf);
+    cm_config_codec(REF_RECORD_CODEC_ID, CODEC_INPUT, (cm_sound_info_t*)&spk_iis0_sound_info);
+
+    mprintf("[SPK] IIS0 slave codec registered (codec_id=%d, 16k mono)\n", REF_RECORD_CODEC_ID);
+}
+#endif /* SPK_USE_DUAL_CHIP_DENOISE */

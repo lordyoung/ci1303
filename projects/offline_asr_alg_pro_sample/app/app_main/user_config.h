@@ -407,28 +407,39 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #define  PLAY_ID_OFFSET_SWITCH 0
 
 /* ── MFCC+DTW speaker recognition ─────────────────────────────────────────── */
+/* ── MFCC+DTW speaker recognition ─────────────────────────────────────────── */
 #define USE_MFCC_DTW_SPK            1
-#define SPK_ENROLL_TIMES            5       /* 原来 3，增加样本量 */
-#define SPK_ENROLL_MIN_ENERGY       150     /* 低于此值拒绝本次注册，要求重说 */
-#define SPK_ENROLL_MIN_FRAMES       15      /* 低于此帧数拒绝本次注册，要求重说 */
+/* ── 双芯片NN降噪: MFCC用CI1306经IIS0降噪后PCM, ASR仍用本地mic(零改动) ──
+ *   1 = 启用双芯片(阶段一验证): MFCC数据来自IIS0 SLAVE(codec 0)
+ *   0 = 单芯片: MFCC沿用本地SSP输出PCM(audio_deal_one_frm_callback) */
+#define SPK_USE_DUAL_CHIP_DENOISE   1
+/* 唤醒后补偿延迟(ms): 吸收CI1306降噪+IIS链路延迟,等完整唤醒词写入ring再回溯取数。
+ * 步骤4标定: feat_frames过小则加大,从60起步。仅双芯片模式生效。 */
+#define SPK_DUAL_CHIP_LATENCY_MS    60
+#define SPK_ENROLL_TIMES            3
 #define SPK_DTW_THRESHOLD_X1000     650
 #define SPK_DTW_BAND_RATIO_X100     20
-#define SPK_PCM_BUF_SIZE            (24*1024)
+/* 32KB(单芯片). 双芯片需覆盖"唤醒词时长 + 补偿延迟"回溯窗口, 扩到40KB(=20480 samples).
+ * s_ring 与 s_pcm_copy 各占此大小, 共增 +16KB BSS(SRAM余量充足, 见反思核算). */
+#define SPK_PCM_BUF_SIZE            (40*1024)
 #define SPK_MAX_TEMPLATE_FRAMES     80
 #define SPK_DEBUG                   1
 #define NVDATA_ID_SPK_BASE          0x60100000u
 #define NVDATA_ID_SPK_TEMPLATE      (NVDATA_ID_SPK_BASE + 0u)
 #define NVDATA_ID_SPK_TEMPLATE_META (NVDATA_ID_SPK_BASE + 1u)
 #define NVDATA_ID_SPK_THRESHOLD     (NVDATA_ID_SPK_BASE + 2u)
-/* 风噪抑制（特征层高通） */
-#define SPK_PREEMPH_X100     97     /* 预加重系数×100，y[n]=x[n]-0.97*x[n-1]；设0关闭 */
-#define SPK_MEL_LOW_HZ       300    /* 梅尔滤波器下限频率(Hz)，抬高可抗风噪(原为80) */
-/* ---- 路(3) 谱减法降噪：仅用于说话人识别 MFCC，不影响 ASR ---- */
-#define SPK_SPEC_SUB_ON             1     /* 谱减法总开关：1开 0关（关=退回原行为，便于对比） */
-#define SPK_SPEC_SUB_ALPHA_X100     90   /* 过减系数 α ×100，越大去噪越狠也越失真，典型 150~300 */
-#define SPK_SPEC_SUB_FLOOR_X100     5     /* 谱底系数 β ×100，残留下限防音乐噪声，典型 2~10 */
-#define SPK_SPEC_SUB_NSCALE_X100    150   /* 噪声底缩放 ×100，把每点最小值抬到接近噪声均值，典型 120~200 */
 
+/* ── 双芯片模式: 阶段一停用协议串口 ──
+ * IIS0 SLAVE 占 PA2/3/5/6 = UART1+UART2 全部引脚, 系统仅剩 UART0(log)。
+ * 协议串口(UART1@PA2/PA3)与 IIS0 物理冲突, 且若迁 UART0 会与 log 同口触发
+ * main.c 的 CI_ASSERT。阶段一验证期先停协议(留 log 看 [SPK] 日志标定),
+ * 阶段二产品化再迁协议到 UART0 + log 改走 SWD/RTT。 */
+#if SPK_USE_DUAL_CHIP_DENOISE
+#undef  MSG_COM_USE_UART_EN
+#define MSG_COM_USE_UART_EN         0
+#endif
+
+#endif /* _USER_CONFIG_H_ */
 #endif /* _USER_CONFIG_H_ */
 
 /* M4: door GPIO control */

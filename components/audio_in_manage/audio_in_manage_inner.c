@@ -108,13 +108,14 @@ void set_ssp_registe(audio_capture_t* audio_capture, ci_ssp_st* ci_ssp, int modu
 //语音处理完一帧的回调函数，里面的执行过程一定要尽可能短
 void audio_deal_one_frm_callback(void* para)
 {
-#if USE_MFCC_DTW_SPK
-    /* 每帧把 PCM 喂给说话人识别模块的环形缓冲区
-       para[0] = 音频数据地址, para[1] = short 采样点数 */
-    {
-        uint32_t *spk_d = (uint32_t *)para;
-        spk_feed_pcm((const short *)spk_d[0], (int)spk_d[1]);
-    }
+#if USE_MFCC_DTW_SPK && !SPK_USE_DUAL_CHIP_DENOISE
+        /* 单芯片模式: 本地SSP输出的每帧PCM喂给说话人识别环形缓冲区
+           para[0] = 音频数据地址, para[1] = short 采样点数
+           双芯片模式下改由 spk_iis0_rx_task 从IIS0喂入, 此处不再喂本地PCM(ASR不受影响) */
+        {
+            uint32_t *spk_d = (uint32_t *)para;
+            spk_feed_pcm((const short *)spk_d[0], (int)spk_d[1]);
+        }
 #endif
     #if VOICE_UPLOAD_BY_UART
     uint32_t *data = (uint32_t *)para; //data[0] = 音频数据地址  data[1] = 音频数据个数， 10ms， 256个short数据
@@ -602,3 +603,51 @@ __attribute__((weak)) void ci_pwk_get_cb(int db_val){}
 __attribute__((weak)) int ci_doa_get(void){return 0;}
 __attribute__((weak)) void sed_rslt_cb(void* data){}
 __attribute__((weak)) void ci_bnpu_err_print(int bnpu_err_type) {}
+#if USE_MFCC_DTW_SPK && SPK_USE_DUAL_CHIP_DENOISE
+/* ── 双芯片NN降噪: 从IIS0(codec 0)接收CI1306降噪后PCM, 喂给MFCC说话人识别 ──
+ * 独立任务, 与主MIC录音(audio_in_manage_inner_task / HOST_MIC codec 1)并行。
+ * 两个codec各有独立信号量+队列(MAX_CODEC_NUM=2正好用满), 跨任务读取安全。 */
+extern void spk_iis0_slave_codec_registe(void);  /* impl in board file CI-D03GS02S.c */
+
+void spk_iis0_rx_task(void *arg)
+{
+    (void)arg;
+
+    /* 等主MIC录音启动完成, 确保codec框架就绪 */
+    while (CI_SS_MIC_VOICE_NORMAL != ciss_get(CI_SS_MIC_VOICE_STATUE))
+        vTaskDelay(pdMS_TO_TICKS(10));
+
+    spk_iis0_slave_codec_registe();
+    cm_start_codec(REF_RECORD_CODEC_ID, CODEC_INPUT);
+    mprintf("[SPK] IIS0 rx_task started, feeding CI1306 denoised PCM to MFCC\n");
+
+    int frame_cnt = 0;
+    for (;;)
+    {
+        /* data_addr 必须每次循环清零:
+         * cm_read_codec 超时(300ms)时不赋值, 否则会重复喂上一块旧PCM */
+        uint32_t data_addr = 0, data_size = 0;
+        cm_read_codec(REF_RECORD_CODEC_ID, &data_addr, &data_size);
+        if (!data_addr)
+            continue;
+
+        const short *pcm = (const short *)data_addr;
+        int n_samples = (int)(data_size / sizeof(short));
+        spk_feed_pcm(pcm, n_samples);
+
+        /* 每100帧(~1秒)打印电平, 验证CI1306数据到达(步骤3判据):
+         * 静默 peak<100, 说话 peak>1000; 持续 peak=0 表示IIS0配置/接线问题 */
+        if (++frame_cnt % 100 == 0)
+        {
+            int32_t peak = 0;
+            for (int i = 0; i < n_samples; i++)
+            {
+                int32_t v = pcm[i] < 0 ? -pcm[i] : pcm[i];
+                if (v > peak) peak = v;
+            }
+            mprintf("[SPK] IIS0 rx: frm=%d peak=%d n=%d\n",
+                    frame_cnt, (int)peak, n_samples);
+        }
+    }
+}
+#endif /* USE_MFCC_DTW_SPK && SPK_USE_DUAL_CHIP_DENOISE */

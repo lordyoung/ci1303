@@ -164,7 +164,15 @@ int asr_result_callback(callback_asr_result_type_t *asr)
         mprintf("send result:%s cfd=%d frm=%d\n", asr->cmd_word, asr->confidence, asr->frm);
 #if USE_MFCC_DTW_SPK
         if (asr->frm > 0)
+        {
+#if SPK_USE_DUAL_CHIP_DENOISE
+            /* 双芯片: 等CI1306降噪+IIS链路把完整唤醒词写入ring后再回溯取数,
+             * 补偿固定latency offset, 避免spk_process切偏截断唤醒词尾部。
+             * 延迟量由 SPK_DUAL_CHIP_LATENCY_MS 控制(步骤4标定)。 */
+            vTaskDelay(pdMS_TO_TICKS(SPK_DUAL_CHIP_LATENCY_MS));
+#endif
             spk_process(asr->frm);
+        }
 #endif
         sys_msg_t send_msg;
         send_msg.msg_type = SYS_MSG_TYPE_ASR;

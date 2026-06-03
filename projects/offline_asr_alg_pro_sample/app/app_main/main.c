@@ -435,7 +435,14 @@ static void task_init(void *p_arg)
     extern void decoder_task_init_port(void);
     decoder_task_init_port();
     #endif
+    //xTaskCreate(audio_in_manage_inner_task, "audio_in_manage_inner_task", 300, NULL, 4, NULL);
     xTaskCreate(audio_in_manage_inner_task, "audio_in_manage_inner_task", 300, NULL, 4, NULL);
+    #if USE_MFCC_DTW_SPK && SPK_USE_DUAL_CHIP_DENOISE
+    /* 双芯片NN降噪: 独立任务从IIS0接收CI1306降噪后PCM喂给MFCC说话人识别 */
+    extern void spk_iis0_rx_task(void *arg);
+    xTaskCreate(spk_iis0_rx_task, "spk_iis0_rx", 320, NULL, 4, NULL);
+    mprintf("[SPK] spk_iis0_rx_task created\n");
+    #endif
     #if AUDIO_PLAYER_ENABLE
     /* 播放器任务 */
     #if SIMPLE_AUDIO_PLAYER_ENABLE

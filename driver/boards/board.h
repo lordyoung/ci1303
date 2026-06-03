@@ -119,10 +119,10 @@ void pad_config_for_vad_light(void);
 void audio_in_codec_registe();
 
 void ref_in_codec_registe(void);
-/**
- * @brief 语音前处理使用IIS输出功能的初始化
- * 
- */
+
+/* 双芯片NN降噪: 注册IIS0 SLAVE(codec 0)接收CI1306降噪后PCM。
+ * 实现在板级文件 CI-D03GS02S.c, 仅 SPK_USE_DUAL_CHIP_DENOISE=1 时编入。 */
+void spk_iis0_slave_codec_registe(void);
 void audio_pre_rslt_out_codec_init(void);
 void audio_pre_rslt_out_codec_init_pa_out(void);
 
