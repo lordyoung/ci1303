@@ -30,6 +30,11 @@
 #if USE_MFCC_DTW_SPK
 #include "mfcc_dtw_spk.h"
 #endif
+#if USE_MFCC_DTW_SPK && SPK_USE_DUAL_CHIP_DENOISE
+#include "ci130x_scu.h"
+#include "ci130x_gpio.h"
+#include "ci130x_dpmu.h"
+#endif
 /**************************************************************************
                     typedef
 ****************************************************************************/
@@ -606,9 +611,39 @@ __attribute__((weak)) void ci_bnpu_err_print(int bnpu_err_type) {}
 #if USE_MFCC_DTW_SPK && SPK_USE_DUAL_CHIP_DENOISE
 /* ── 双芯片NN降噪: 从IIS0(codec 0)接收CI1306降噪后PCM, 喂给MFCC说话人识别 ──
  * 独立任务, 与主MIC录音(audio_in_manage_inner_task / HOST_MIC codec 1)并行。
- * 两个codec各有独立信号量+队列(MAX_CODEC_NUM=2正好用满), 跨任务读取安全。 */
+ * 两个codec各有独立信号量+队列(MAX_CODEC_NUM=2正好用满), 跨任务读取安全。
+ *
+ * 根本原因说明: cm_start_codec() 进入前先取 cm.semaphore 互斥锁; 若 CI1306
+ * 未接, IIS0 SLAVE 的 iis_wait_load_ctrl() 死循环永不退出, 锁永久持有,
+ * 导致所有后续 cm_start_codec(PLAY_CODEC_ID) 也永久阻塞 → 喇叭无声。
+ * 修复: 先用 GPIO 检测 PA3(LRCK) 是否在切换, 仅 CI1306 已接时才调用
+ * cm_start_codec(), 未接时任务循环等待, 不持有互斥锁, 播音不受影响。 */
 extern void spk_iis0_slave_codec_registe(void);  /* impl in board file CI-D03GS02S.c */
 
+/* 检测 CI1306 是否已接并驱动 LRCK:
+ * 将 PA3 配为 GPIO 输入 + 下拉; CI1306 LRCK@16kHz 每 31μs 翻转一次,
+ * 在 ~2ms 窗口内采样 40 次(每次间隔 ~50μs), 若同时观测到高低电平即认为有时钟。
+ * 无 CI1306 时 PA3 被拉低, 只能看到 0 → 返回 false。 */
+static bool spk_detect_ci1306_lrck(void)
+{
+    /* 按板级代码约定顺序: direction → pull → reuse → gpio_set_input_mode → read */
+    scu_set_device_gate(PA, ENABLE);
+    dpmu_set_io_direction(PA3, DPMU_IO_DIRECTION_INPUT);
+    dpmu_set_io_pull(PA3, DPMU_IO_PULL_DOWN);
+    dpmu_set_io_reuse(PA3, FIRST_FUNCTION);
+    gpio_set_input_mode(PA, pin_3);   /* 必须: 将GPIO模块方向寄存器设为输入 */
+
+    bool saw_high = false, saw_low = false;
+    for (int i = 0; i < 40; i++)
+    {
+        if (gpio_get_input_level(PA, pin_3)) saw_high = true;
+        else                                 saw_low  = true;
+        if (saw_high && saw_low) break;
+        _delay_10us_240M(5);   /* ~50μs, non-multiple of 62.5μs LRCK period */
+    }
+    dpmu_set_io_pull(PA3, DPMU_IO_PULL_DISABLE);
+    return saw_high && saw_low;
+}
 void spk_iis0_rx_task(void *arg)
 {
     (void)arg;
@@ -617,6 +652,15 @@ void spk_iis0_rx_task(void *arg)
     while (CI_SS_MIC_VOICE_NORMAL != ciss_get(CI_SS_MIC_VOICE_STATUE))
         vTaskDelay(pdMS_TO_TICKS(10));
 
+    /* 检测 CI1306 LRCK; 未接时每 2s 重试, 不持有 cm.semaphore, 播音正常 */
+    mprintf("[SPK] waiting for CI1306 LRCK on PA3...\n");
+    while (!spk_detect_ci1306_lrck())
+    {
+        mprintf("[SPK] CI1306 not detected, retry in 2s\n");
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+    mprintf("[SPK] CI1306 LRCK detected, starting IIS0 slave\n");
+
     spk_iis0_slave_codec_registe();
     cm_start_codec(REF_RECORD_CODEC_ID, CODEC_INPUT);
     mprintf("[SPK] IIS0 rx_task started, feeding CI1306 denoised PCM to MFCC\n");
@@ -624,8 +668,6 @@ void spk_iis0_rx_task(void *arg)
     int frame_cnt = 0;
     for (;;)
     {
-        /* data_addr 必须每次循环清零:
-         * cm_read_codec 超时(300ms)时不赋值, 否则会重复喂上一块旧PCM */
         uint32_t data_addr = 0, data_size = 0;
         cm_read_codec(REF_RECORD_CODEC_ID, &data_addr, &data_size);
         if (!data_addr)
@@ -635,8 +677,6 @@ void spk_iis0_rx_task(void *arg)
         int n_samples = (int)(data_size / sizeof(short));
         spk_feed_pcm(pcm, n_samples);
 
-        /* 每100帧(~1秒)打印电平, 验证CI1306数据到达(步骤3判据):
-         * 静默 peak<100, 说话 peak>1000; 持续 peak=0 表示IIS0配置/接线问题 */
         if (++frame_cnt % 100 == 0)
         {
             int32_t peak = 0;
