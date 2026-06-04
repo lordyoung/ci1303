@@ -1,14 +1,9 @@
-#include <math.h>               /* 新增: sqrtf() for CMVN */
+/* 修改后：退回纯CMN（减均值），删掉math.h和方差段 */
 #include "feat_postproc.h"
 #include "user_config.h"
 
-/* Intermediate buffer for Δ — static to avoid stack overflow */
 static float s_d1[SPK_MAX_TEMPLATE_FRAMES][SPK_N_MFCC_BASE];
 
-/* CMVN: subtract per-dim mean then divide by per-dim std-dev.
- * Per-dimension variance equalisation matters even with cosine distance:
- * it prevents low-order MFCC dims (most affected by NN denoiser residuals
- * in wind) from dominating the dot-product. */
 void feat_apply_cmn(float feats[][SPK_N_MFCC_BASE], int n_frames)
 {
     for (int d = 0; d < SPK_N_MFCC_BASE; d++) {
@@ -16,15 +11,8 @@ void feat_apply_cmn(float feats[][SPK_N_MFCC_BASE], int n_frames)
         for (int t = 0; t < n_frames; t++) mean += feats[t][d];
         mean /= (float)n_frames;
         for (int t = 0; t < n_frames; t++) feats[t][d] -= mean;
-
-        float var = 0.0f;
-        for (int t = 0; t < n_frames; t++) var += feats[t][d] * feats[t][d];
-        var /= (float)n_frames;
-        float inv_std = (var > 1e-8f) ? (1.0f / sqrtf(var)) : 1.0f;
-        for (int t = 0; t < n_frames; t++) feats[t][d] *= inv_std;
     }
 }
-
 /* D=2 central difference for sequence f[0..n-1] at time t, dim d */
 static float central_diff(const float (*f)[SPK_N_MFCC_BASE], int t, int n, int d)
 {
