@@ -419,7 +419,10 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #define SPK_ENROLL_TIMES            3
 #define SPK_ENROLL_MIN_ENERGY       200   /* 平均绝对幅值，拒绝过轻声注册 */
 #define SPK_ENROLL_MIN_FRAMES       15    /* 特征帧下限，约150ms，拒绝截断 */
-#define SPK_DTW_THRESHOLD_X1000     650
+
+#define SPK_VAD_ENERGY_RATIO        0.01f   /* 帧能量>峰值*0.01视为语音(-20dB), 适用于NN降噪后信号 */
+#define SPK_VAD_MARGIN_FRAMES       3       /* 语音段两端各保留3帧(~48ms)防止切掉弱辅音 */
+#define SPK_DTW_THRESHOLD_X1000     355
 #define SPK_DTW_BAND_RATIO_X100     20
 #define SPK_MEL_LOW_HZ              80
 /* 32KB(单芯片). 双芯片需覆盖"唤醒词时长 + 补偿延迟"回溯窗口, 扩到40KB(=20480 samples).

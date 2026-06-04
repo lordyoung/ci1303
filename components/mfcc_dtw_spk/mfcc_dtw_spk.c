@@ -21,7 +21,9 @@ static short s_ring[SPK_PCM_BUF_SAMPLES];     /* capture ring buffer (fed every 
 static short s_pcm_copy[SPK_PCM_BUF_SAMPLES]; /* linear snapshot handed to spk_task    */
 static float s_mfcc_buf[SPK_MAX_TEMPLATE_FRAMES][SPK_N_MFCC_BASE];
 static float s_feat_buf[SPK_MAX_TEMPLATE_FRAMES][SPK_FEAT_DIM];
+/* 修改后：在该行下方紧接着加一行 */
 static float s_template[SPK_MAX_TEMPLATE_FRAMES][SPK_FEAT_DIM];
+static float s_frame_e[SPK_PCM_BUF_SAMPLES / SPK_FRAME_SHIFT + 2]; /* VAD帧能量缓冲 */
 
 /* ── ring buffer write state (written from BNPU frame callback context) ────── */
 
@@ -127,40 +129,51 @@ static int spk_endpoint(const short *pcm, int n, int *p_start)
     *p_start = first * W;
     return (last - first + 1) * W;
 }
-/* ── utterance processing (runs in spk_task) ───────────────────────────────── */
+
+/* 修改后：在 process_utterance 之前插入 vad_trim，再替换函数头 */
+static void vad_trim(const short *pcm, int n, int *p_start, int *p_len)
+{
+    int nf = 0;
+    float peak = 1.0f;
+    for (int off = 0; off + SPK_FRAME_LEN <= n; off += SPK_FRAME_SHIFT) {
+        float e = 0.0f;
+        for (int i = 0; i < SPK_FRAME_LEN; i++) {
+            float v = (float)pcm[off + i];
+            e += v * v;
+        }
+        s_frame_e[nf] = e;
+        if (e > peak) peak = e;
+        nf++;
+    }
+    if (nf <= 0) { *p_start = 0; *p_len = n; return; }
+
+    float thr = peak * SPK_VAD_ENERGY_RATIO;
+    int first = 0, last = nf - 1;
+    while (first < nf   && s_frame_e[first] < thr) first++;
+    while (last  > first && s_frame_e[last]  < thr) last--;
+    if (first > last) { *p_start = 0; *p_len = n; return; } /* 全静音: 退回整段 */
+
+    first -= SPK_VAD_MARGIN_FRAMES; if (first < 0)      first = 0;
+    last  += SPK_VAD_MARGIN_FRAMES; if (last  > nf - 1) last  = nf - 1;
+
+    int s = first * SPK_FRAME_SHIFT;
+    int e = last  * SPK_FRAME_SHIFT + SPK_FRAME_LEN;
+    if (e > n) e = n;
+    *p_start = s;
+    *p_len   = e - s;
+}
+
 static void process_utterance(int n_pcm_samples)
 {
-        /* 端点检测：裁掉前后静音，把语音段搬到缓冲区开头。
-     * 这样同一句话每次得到的特征长度一致，模板才不会糊。 */
-    {
-        int sp_start = 0;
-        int sp_len = spk_endpoint(s_pcm_copy, n_pcm_samples, &sp_start);
-        mprintf("[SPK] endpoint: raw=%d -> speech=%d start=%d\n",
-                n_pcm_samples, sp_len, sp_start);
-        if (sp_start > 0)
-            memmove(s_pcm_copy, s_pcm_copy + sp_start,
-                    (size_t)sp_len * sizeof(short));
-        n_pcm_samples = sp_len;
-    }
-    /* Print 17: PCM energy check */    
-    {
-        long long sum = 0;
-        for (int i = 0; i < n_pcm_samples; i++) {
-            int s = s_pcm_copy[i];
-            sum += (s < 0) ? -s : s;
-        }
-        int energy = (int)(sum / n_pcm_samples);
-        mprintf("[SPK] pcm energy=%d n=%d%s\n", energy, n_pcm_samples,
-                energy < 100 ? " WARN:quiet" : "");
-    }
+    /* 0. VAD: 裁掉首尾静音, 消除阵风静音残差对CMN/DTW的污染 */
+    int v_start = 0, v_len = n_pcm_samples;
+    vad_trim(s_pcm_copy, n_pcm_samples, &v_start, &v_len);
+    if (v_len < SPK_FRAME_LEN) { v_start = 0; v_len = n_pcm_samples; }
+    mprintf("[SPK] vad: total=%d voiced=%d start=%d\n", n_pcm_samples, v_len, v_start);
 
-    /* 1. MFCC */
-    int n_feat = feat_extract_mfcc(s_pcm_copy, n_pcm_samples,
+    /* 1. MFCC (仅语音段) */
+    int n_feat = feat_extract_mfcc(s_pcm_copy + v_start, v_len,
                                    s_mfcc_buf, SPK_MAX_TEMPLATE_FRAMES);
-
-    /* Print 16: feat_frames adequacy */
-    mprintf("[SPK] feat_frm=%d%s\n", n_feat, n_feat < 20 ? " WARN:short" : "");
-
     if (n_feat < 4) {
         mprintf("[SPK] too few frames: %d\n", n_feat);
         if (s_state == SPK_ST_ENROLL && s_enroll_cb)
@@ -168,8 +181,9 @@ static void process_utterance(int n_pcm_samples)
         return;
     }
 
-    /* 2. CMN + delta -> 39-dim */
-    feat_apply_cmvn(s_mfcc_buf, n_feat);   /* 原来是 feat_apply_cmn */    feat_pack_with_delta((const float (*)[SPK_N_MFCC_BASE])s_mfcc_buf,
+    /* 2. CMVN + delta → 39-dim */
+    feat_apply_cmn(s_mfcc_buf, n_feat);
+    feat_pack_with_delta((const float (*)[SPK_N_MFCC_BASE])s_mfcc_buf,
                          n_feat, s_feat_buf);
 
     if (s_state == SPK_ST_ENROLL) {
