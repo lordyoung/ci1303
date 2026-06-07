@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include "spk_template_store.h"
 #include "ci_nvdata_manage.h"
 #include "user_config.h"
