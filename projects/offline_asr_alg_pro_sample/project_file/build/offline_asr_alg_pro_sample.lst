@@ -90,7 +90,7 @@ Disassembly of section .init:
 1ff51140:	00000517          	auipc	a0,0x0
 1ff51144:	ffc50513          	addi	a0,a0,-4 # 1ff5113c <_start>
 1ff51148:	000205b7          	lui	a1,0x20
-1ff5114c:	f5158593          	addi	a1,a1,-175 # 1ff51 <platform_config.c.659d2807+0x562>
+1ff5114c:	f5158593          	addi	a1,a1,-175 # 1ff51 <platform_config.c.b7531d08+0x562>
 1ff51150:	05b2                	slli	a1,a1,0xc
 1ff51152:	00b57863          	bgeu	a0,a1,1ff51162 <_virtual_start>
 1ff51156:	00000517          	auipc	a0,0x0
@@ -14555,7 +14555,7 @@ Disassembly of section .text:
 1ff5b926:	ff450513          	addi	a0,a0,-12 # 1ff65ff4 <__func__.5642+0x15c>
 1ff5b92a:	afbff0ef          	jal	ra,1ff5b424 <_printf>
 1ff5b92e:	e42d                	bnez	s0,1ff5b998 <spk_verify_callback+0x82>
-1ff5b930:	16d00593          	li	a1,365
+1ff5b930:	12200593          	li	a1,290
 1ff5b934:	1ff66537          	lui	a0,0x1ff66
 1ff5b938:	8d85                	sub	a1,a1,s1
 1ff5b93a:	01450513          	addi	a0,a0,20 # 1ff66014 <__func__.5642+0x17c>
@@ -14589,7 +14589,7 @@ Disassembly of section .text:
 1ff5b998:	4905                	li	s2,1
 1ff5b99a:	01241963          	bne	s0,s2,1ff5b9ac <spk_verify_callback+0x96>
 1ff5b99e:	1ff66537          	lui	a0,0x1ff66
-1ff5b9a2:	e9348593          	addi	a1,s1,-365
+1ff5b9a2:	ede48593          	addi	a1,s1,-290
 1ff5b9a6:	08450513          	addi	a0,a0,132 # 1ff66084 <__func__.5642+0x1ec>
 1ff5b9aa:	bfe1                	j	1ff5b982 <spk_verify_callback+0x6c>
 1ff5b9ac:	4789                	li	a5,2
@@ -14837,7 +14837,7 @@ Disassembly of section .text:
 1ff5bc90:	557d                	li	a0,-1
 1ff5bc92:	000406b7          	lui	a3,0x40
 1ff5bc96:	cc08                	sw	a0,24(s0)
-1ff5bc98:	08468593          	addi	a1,a3,132 # 40084 <ci_nvdata_manage.c.7888ac02+0x1596>
+1ff5bc98:	08468593          	addi	a1,a3,132 # 40084 <ci_nvdata_manage.c.78c3c847+0x1596>
 1ff5bc9c:	c44c                	sw	a1,12(s0)
 1ff5bc9e:	444c                	lw	a1,12(s0)
 1ff5bca0:	02072223          	sw	zero,36(a4)
@@ -22773,7 +22773,7 @@ Disassembly of section .text:
 1ff61ad6:	864e                	mv	a2,s3
 1ff61ad8:	41f9d693          	srai	a3,s3,0x1f
 1ff61adc:	0f9010ef          	jal	ra,1ff633d4 <__divdi3>
-1ff61ae0:	0c700793          	li	a5,199
+1ff61ae0:	03100793          	li	a5,49
 1ff61ae4:	85aa                	mv	a1,a0
 1ff61ae6:	00a7d563          	bge	a5,a0,1ff61af0 <spk_task+0x57c>
 1ff61aea:	47b9                	li	a5,14
@@ -22926,20 +22926,20 @@ Disassembly of section .text:
 1ff61ccc:	fffc0993          	addi	s3,s8,-1
 1ff61cd0:	05377063          	bgeu	a4,s3,1ff61d10 <spk_task+0x79c>
 1ff61cd4:	55fd                	li	a1,-1
-1ff61cd6:	16d00793          	li	a5,365
+1ff61cd6:	12200793          	li	a5,290
 1ff61cda:	40b786b3          	sub	a3,a5,a1
 1ff61cde:	1eb7fa63          	bgeu	a5,a1,1ff61ed2 <spk_task+0x95e>
 1ff61ce2:	1ff67737          	lui	a4,0x1ff67
 1ff61ce6:	e6070713          	addi	a4,a4,-416 # 1ff66e60 <__func__.5642+0xfc8>
 1ff61cea:	1ff67537          	lui	a0,0x1ff67
-1ff61cee:	16d00613          	li	a2,365
+1ff61cee:	12200613          	li	a2,290
 1ff61cf2:	f4050513          	addi	a0,a0,-192 # 1ff66f40 <__func__.5642+0x10a8>
 1ff61cf6:	c22e                	sw	a1,4(sp)
 1ff61cf8:	f2cf90ef          	jal	ra,1ff5b424 <_printf>
 1ff61cfc:	d281a783          	lw	a5,-728(gp) # 1ff67e80 <s_verify_cb>
 1ff61d00:	8a0784e3          	beqz	a5,1ff615a8 <spk_task+0x34>
 1ff61d04:	4592                	lw	a1,4(sp)
-1ff61d06:	16e5b513          	sltiu	a0,a1,366
+1ff61d06:	1235b513          	sltiu	a0,a1,291
 1ff61d0a:	00154513          	xori	a0,a0,1
 1ff61d0e:	bf4d                	j	1ff61cc0 <spk_task+0x74c>
 1ff61d10:	41840733          	sub	a4,s0,s8
@@ -26938,7 +26938,7 @@ Disassembly of section .text:
 1ff64818:	23478793          	addi	a5,a5,564 # e66d1234 <ICACHE_ALIAS_ADDR+0xe66d1235>
 1ff6481c:	c15c                	sw	a5,4(a0)
 1ff6481e:	0005e7b7          	lui	a5,0x5e
-1ff64822:	eec78793          	addi	a5,a5,-276 # 5deec <ci130x_spiflash.c.3f4c599b+0x30c>
+1ff64822:	eec78793          	addi	a5,a5,-276 # 5deec <ci130x_spiflash.c.52839dbf+0x30c>
 1ff64826:	c51c                	sw	a5,8(a0)
 1ff64828:	47ad                	li	a5,11
 1ff6482a:	00f51623          	sh	a5,12(a0)
