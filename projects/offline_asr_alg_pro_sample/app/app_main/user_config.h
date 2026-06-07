@@ -435,7 +435,7 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 #define NVDATA_ID_SPK_TEMPLATE      (NVDATA_ID_SPK_BASE + 0u)
 #define NVDATA_ID_SPK_TEMPLATE_META (NVDATA_ID_SPK_BASE + 1u)
 #define NVDATA_ID_SPK_THRESHOLD     (NVDATA_ID_SPK_BASE + 2u)
-
+#define NVDATA_ID_SPK_CHUNK_BASE    (NVDATA_ID_SPK_BASE + 3u)   /* 帧块起始ID */
 /* ── 双芯片模式: 阶段一停用协议串口 ──
  * IIS0 SLAVE 占 PA2/3/5/6 = UART1+UART2 全部引脚, 系统仅剩 UART0(log)。
  * 协议串口(UART1@PA2/PA3)与 IIS0 物理冲突, 且若迁 UART0 会与 log 同口触发
