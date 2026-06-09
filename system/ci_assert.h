@@ -13,13 +13,8 @@
 #include <stdio.h>
 #include "ci_log.h"
 
-#ifndef mprintf
-#if USE_STD_PRINTF
-#define mprintf(fmt, args...) printf(fmt, ## args)
-#else
-#define mprintf(fmt, args...) _printf(fmt, ## args)
-#endif
-#endif
+/* mprintf is now defined in ci_log.h via _mprintf; avoid redefining it here
+   to prevent circular-include redefinition ordering issues under LTO. */
 
 #define CI_ASSERT(x,msg)                                                                                                    \
     if( ( x ) == 0 )                                                                                                        \

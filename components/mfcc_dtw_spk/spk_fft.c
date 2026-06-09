@@ -22,3 +22,8 @@ int ci_software_fft_w512_s256(const short *audio_data, const float *window_data,
     result[1] = 0.0f;  /* CMSIS-DSP packs Nyquist here; interleaved wants Im(DC)=0 */
     return 0;
 }
+
+/* Provide mprintf as a function symbol for precompiled libraries
+ * (libnewlib_port.a __wrap_cosf/__wrap_sinf etc.) that call it directly.
+ * All source code uses the mprintf macro from ci_log.h instead. */
+int mprintf(const char *fmt, ...) { return 0; }
