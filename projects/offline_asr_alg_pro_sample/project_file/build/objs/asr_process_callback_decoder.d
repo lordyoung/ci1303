@@ -37,6 +37,8 @@ build/objs/asr_process_callback_decoder.o: \
  ../../../driver/ci130x_chip_driver/inc/ci130x_core_misc.h \
  ../../../components/nlp/ci_nlp.h \
  ../../../components/status_share/status_share.h \
+ ../../../projects/offline_asr_alg_pro_sample/app/app_main/servo.h \
+ ../../../driver/ci130x_chip_driver/inc/ci130x_pwm.h \
  ../../../components/mfcc_dtw_spk/mfcc_dtw_spk.h
 
 ../../../system/sdk_default_config.h:
@@ -118,5 +120,9 @@ build/objs/asr_process_callback_decoder.o: \
 ../../../components/nlp/ci_nlp.h:
 
 ../../../components/status_share/status_share.h:
+
+../../../projects/offline_asr_alg_pro_sample/app/app_main/servo.h:
+
+../../../driver/ci130x_chip_driver/inc/ci130x_pwm.h:
 
 ../../../components/mfcc_dtw_spk/mfcc_dtw_spk.h:
