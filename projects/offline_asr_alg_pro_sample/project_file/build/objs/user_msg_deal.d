@@ -42,6 +42,7 @@ build/objs/user_msg_deal.o: \
  ../../../projects/offline_asr_alg_pro_sample/app/app_main/user_msg_deal.h \
  ../../../projects/offline_asr_alg_pro_sample/app/app_main/user_control.h \
  ../../../driver/ci130x_chip_driver/inc/ci130x_pwm.h \
+ ../../../projects/offline_asr_alg_pro_sample/app/app_main/servo.h \
  ../../../driver/ci130x_chip_driver/inc/ci130x_dpmu.h
 
 ../../../components/freertos/include/FreeRTOS.h:
@@ -133,5 +134,7 @@ build/objs/user_msg_deal.o: \
 ../../../projects/offline_asr_alg_pro_sample/app/app_main/user_control.h:
 
 ../../../driver/ci130x_chip_driver/inc/ci130x_pwm.h:
+
+../../../projects/offline_asr_alg_pro_sample/app/app_main/servo.h:
 
 ../../../driver/ci130x_chip_driver/inc/ci130x_dpmu.h:

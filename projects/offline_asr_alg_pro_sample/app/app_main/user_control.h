@@ -2,6 +2,7 @@
 #define __USER_CONTROL_H__
 
 #include "ci130x_pwm.h"
+#include "servo.h"          // ← 新增
 #include "ci130x_gpio.h"
 #include "ci130x_dpmu.h"
 

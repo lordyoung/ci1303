@@ -85,7 +85,8 @@ build/objs/main.o: \
  ../../../components/freertos/include/semphr.h \
  ../../../components/freertos/include/queue.h \
  ../../../components/freertos/include/stream_buffer.h \
- ../../../components/mfcc_dtw_spk/mfcc_dtw_spk.h
+ ../../../components/mfcc_dtw_spk/mfcc_dtw_spk.h \
+ ../../../projects/offline_asr_alg_pro_sample/app/app_main/servo.h
 
 ../../../components/freertos/include/FreeRTOS.h:
 
@@ -266,3 +267,5 @@ build/objs/main.o: \
 ../../../components/freertos/include/stream_buffer.h:
 
 ../../../components/mfcc_dtw_spk/mfcc_dtw_spk.h:
+
+../../../projects/offline_asr_alg_pro_sample/app/app_main/servo.h:

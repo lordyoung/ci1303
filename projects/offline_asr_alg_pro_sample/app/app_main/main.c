@@ -55,6 +55,7 @@
 #include "cias_record_demo.h"
 #if USE_MFCC_DTW_SPK
 #include "mfcc_dtw_spk.h"
+#include "servo.h"
 #include "ci130x_gpio.h"
 
 static volatile int s_door_open = 0;
@@ -81,28 +82,36 @@ static void spk_door_close_task(void *p)
 
 static void spk_verify_callback(spk_result_t result, int dist)
 {
-    mprintf("[SPK] result=%d dist*1000=%d\n", (int)result, dist);
+    int pending = servo_get_pending_door();
+    mprintf("[SPK] verify_cb: result=%d dist*1000=%d pending_door=%d\n",
+            (int)result, dist, pending);
+
     if (result == SPK_RESULT_ACCEPT) {
-        /* Print 21: ACCEPT + open door */
-        int margin = SPK_DTW_THRESHOLD_X1000 - dist;
-        mprintf("[SPK] ACCEPT - owner confirmed (margin=%d)\n", margin);
-        if (!s_door_open) {
-            s_door_open = 1;
-            gpio_set_output_high_level(SPK_DOOR_GPIO_BASE, SPK_DOOR_GPIO_PIN);
-            xTaskCreate(spk_door_close_task, "spk_door", 256, NULL, 3, NULL);
-            mprintf("[SPK] door opened for %dms\n", SPK_DOOR_OPEN_MS);
+        mprintf("[SPK] ACCEPT — owner confirmed\n");
+        if (pending) {
+            mprintf("[SERVO] open-door granted -> angle B(%d)\n", SERVO_ANGLE_B);
+            servo_set_angle(SERVO_ANGLE_B);
         } else {
-            mprintf("[SPK] door already open\n");
+            mprintf("[SERVO] ACCEPT but no pending door, servo idle\n");
         }
     } else if (result == SPK_RESULT_REJECT) {
-        /* Print 20: REJECT */
-        mprintf("[SPK] REJECT - not owner (over_thr=%d)\n",
-                dist - SPK_DTW_THRESHOLD_X1000);
+        mprintf("[SPK] REJECT — not owner, servo idle\n");
     } else if (result == SPK_RESULT_NO_TEMPLATE) {
-        mprintf("[SPK] no template - starting enrollment\n");
-        spk_start_enroll(spk_enroll_callback);
+        mprintf("[SPK] NO_TEMPLATE\n");
+        if (pending) {
+            /* 仅"小屁开门"且无模板时才启动注册；锁车不打断 */
+            mprintf("[SPK] start enrollment (triggered by open-door)\n");
+            spk_start_enroll(spk_enroll_callback);
+        } else {
+            mprintf("[SPK] no template & not open-door, ignore\n");
+        }
+    } else {
+        mprintf("[SPK] ERROR result, servo idle\n");
     }
+
+    servo_set_pending_door(0);   /* 每次 SPK 回调后清标志 */
 }
+
 #endif
 /**
  * @brief 硬件初始化
