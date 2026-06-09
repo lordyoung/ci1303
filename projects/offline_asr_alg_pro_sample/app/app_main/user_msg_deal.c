@@ -505,19 +505,7 @@ uint32_t deal_asr_msg_by_cmd_id(sys_msg_asr_data_t *asr_msg, cmd_handle_t cmd_ha
             ret = 0;
         break;
 
-        case SERVO_CMD_OPEN_DOOR:   /* 1: 小屁开门 — 等声纹结果再转 */
-            mprintf("[SERVO] ASR '小屁开门' -> wait voiceprint\n");
-            servo_set_pending_door(1);
-            ret = 0;    /* 走原播报流程 */
-        break;
 
-        case SERVO_CMD_LOCK_CAR:    /* 5: 小屁锁车 — 无条件立即转角度A */
-            mprintf("[SERVO] ASR '小屁锁车' -> angle A(%d) now\n", SERVO_ANGLE_A);
-            servo_set_pending_door(0);
-            servo_set_angle(SERVO_ANGLE_A);
-            ret = 0;    /* 走原播报流程 */
-        break;
-        
         ///tag-insert-control-volume-code-pos-6
 
 #if USE_VPR

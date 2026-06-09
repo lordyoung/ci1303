@@ -24,6 +24,7 @@
 
 #include "ci_nlp.h"
 #include "ci_log.h"
+#include "servo.h"
 #if USE_MFCC_DTW_SPK
 #include "mfcc_dtw_spk.h"
 #endif
@@ -163,17 +164,27 @@ int asr_result_callback(callback_asr_result_type_t *asr)
         #if (MULT_INTENT < 2)
         mprintf("send result:%s cfd=%d frm=%d\n", asr->cmd_word, asr->confidence, asr->frm);
 #if USE_MFCC_DTW_SPK
-        if (asr->frm > 0)
         {
+            uint16_t _cmd_id = cmd_info_get_command_id(asr->cmd_handle);
+            if (_cmd_id == SERVO_CMD_LOCK_CAR) {
+                /* 小屁锁车: 立即转角度A, 不需要声纹, 不调用spk(避免污染注册模板) */
+                servo_set_pending_door(0);
+                servo_set_angle(SERVO_ANGLE_A);
+                mprintf("[SERVO] lock car -> angle A(%d) now\n", SERVO_ANGLE_A);
+            } else if (_cmd_id == SERVO_CMD_OPEN_DOOR && asr->frm > 0) {
+                /* 小屁开门: 需声纹验证。pending_door必须在spk_process前置1,
+                 * 否则无模板时spk_task几乎0计算立即回调,来不及置位(日志已证实) */
+                servo_set_pending_door(1);
+                mprintf("[SERVO] open door -> verify voiceprint\n");
 #if SPK_USE_DUAL_CHIP_DENOISE
-            /* 双芯片: 等CI1306降噪+IIS链路把完整唤醒词写入ring后再回溯取数,
-             * 补偿固定latency offset, 避免spk_process切偏截断唤醒词尾部。
-             * 延迟量由 SPK_DUAL_CHIP_LATENCY_MS 控制(步骤4标定)。 */
-            vTaskDelay(pdMS_TO_TICKS(SPK_DUAL_CHIP_LATENCY_MS));
+                vTaskDelay(pdMS_TO_TICKS(SPK_DUAL_CHIP_LATENCY_MS));
 #endif
-            spk_process(asr->frm);
+                spk_process(asr->frm);   /* 仅"小屁开门"喂spk: 验证 / 无模板时采集注册样本 */
+            }
+            /* 其它命令词不调用spk_process, 防止注册期被误采集 */
         }
 #endif
+        
         sys_msg_t send_msg;
         send_msg.msg_type = SYS_MSG_TYPE_ASR;
         send_msg.msg_data.asr_data.asr_status = MSG_ASR_STATUS_GOOD_RESULT;
