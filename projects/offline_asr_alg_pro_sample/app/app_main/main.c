@@ -89,8 +89,8 @@ static void spk_verify_callback(spk_result_t result, int dist)
     if (result == SPK_RESULT_ACCEPT) {
         mprintf("[SPK] ACCEPT — owner confirmed\n");
         if (pending) {
-            mprintf("[SERVO] open-door granted -> angle B(%d)\n", SERVO_ANGLE_B);
-            servo_set_angle(SERVO_ANGLE_B);
+            mprintf("[SERVO] open-door granted -> angle B(%d), hold %dms, back to rest\n",SERVO_ANGLE_B, SERVO_HOLD_MS);
+            servo_pulse_to(SERVO_ANGLE_B);
         } else {
             mprintf("[SERVO] ACCEPT but no pending door, servo idle\n");
         }

@@ -169,8 +169,9 @@ int asr_result_callback(callback_asr_result_type_t *asr)
             if (_cmd_id == SERVO_CMD_LOCK_CAR) {
                 /* 小屁锁车: 立即转角度A, 不需要声纹, 不调用spk(避免污染注册模板) */
                 servo_set_pending_door(0);
-                servo_set_angle(SERVO_ANGLE_A);
-                mprintf("[SERVO] lock car -> angle A(%d) now\n", SERVO_ANGLE_A);
+                servo_pulse_to(SERVO_ANGLE_A);
+                mprintf("[SERVO] lock car -> angle A(%d), hold %dms, back to rest\n",
+                        SERVO_ANGLE_A, SERVO_HOLD_MS);
             } else if (_cmd_id == SERVO_CMD_OPEN_DOOR && asr->frm > 0) {
                 /* 小屁开门: 需声纹验证。pending_door必须在spk_process前置1,
                  * 否则无模板时spk_task几乎0计算立即回调,来不及置位(日志已证实) */
