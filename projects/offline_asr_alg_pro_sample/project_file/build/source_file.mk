@@ -526,6 +526,11 @@ OBJS += build/objs/user_control.o
 build/objs/user_control.o : $(SDK_PATH)/projects/offline_asr_alg_pro_sample/app/app_main/user_control.c
 	$(CC_PREFIX)$(CC) $(C_FLAGS) -c -o "$@" "$<"
 
+OBJS += build/objs/servo.o
+-include build/objs/servo.d
+build/objs/servo.o : $(SDK_PATH)/projects/offline_asr_alg_pro_sample/app/app_main/servo.c
+	$(CC_PREFIX)$(CC) $(C_FLAGS) -c -o "$@" "$<"
+
 OBJS += build/objs/doa_app_handle.o
 -include build/objs/doa_app_handle.d
 build/objs/doa_app_handle.o : $(SDK_PATH)/projects/offline_asr_alg_pro_sample/app/app_doa/doa_app_handle.c
