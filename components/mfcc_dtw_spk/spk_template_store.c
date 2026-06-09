@@ -4,58 +4,57 @@
 #include "user_config.h"
 #include "ci_log.h"
 
-#define TPL_MAGIC  0x53504B32u   /* 'SPK2'：升级版本号，旧格式自动失效→重注册一次 */
-
-/* 每帧字节数；必须 ≤ NV 单条目上限(240)，否则写入会静默失败 */
-#define SPK_FRAME_BYTES   ((uint16_t)(SPK_FEAT_DIM * sizeof(float)))
-#define SPK_NV_ITEM_LIMIT (240)
+#define TPL_MAGIC  0x53504B33u   /* 'SPK3' — 升级magic, 使旧格式失效自动触发重注册 */
 
 typedef struct {
     uint32_t magic;
     int32_t  n_frames;
+    int32_t  feat_dim;
 } tpl_meta_t;
 
-/* 返回 1=成功，0=失败 */
-static int nv_write_checked(uint32_t id, uint16_t len, void *buf)
+/* 每帧一个NV item: SPK_FEAT_DIM(39)*4 = 156字节 < 240上限
+ * 关键: 新item必须先 cinv_item_init 创建, cinv_item_write 对不存在的item返回UNINIT且不创建 */
+static int nv_put(uint32_t id, uint16_t len, const void *buf)
 {
-    cinv_item_ret_t r = cinv_item_write(id, len, buf);
-    if (r != CINV_OPER_SUCCESS) {
-        cinv_item_delete(id);
-        cinv_item_init(id, len, buf);
-        r = cinv_item_write(id, len, buf);
+    cinv_item_ret_t r = cinv_item_write(id, len, (void *)buf);
+    if (r == CINV_OPER_SUCCESS) return 0;          /* 已存在 -> 更新成功 */
+    if (r == CINV_ITEM_UNINIT) {                    /* 不存在 -> 创建(init会写入数据) */
+        r = cinv_item_init(id, len, (void *)buf);
+        if (r == CINV_ITEM_UNINIT || r == CINV_OPER_SUCCESS) return 0;
     }
-    return (r == CINV_OPER_SUCCESS);
+    mprintf("[SPK] NV put FAIL id=0x%x len=%d ret=%d\n", (unsigned)id, (int)len, (int)r);
+    return (int)r;                                  /* 非0: 打印真实错误码 */
 }
 
 int spk_tpl_save(const float feats[][SPK_FEAT_DIM], int n_frames)
 {
-    /* 边界保护：每帧不得超过 NV 单条目上限 */
-    if (SPK_FRAME_BYTES > SPK_NV_ITEM_LIMIT) {
-        mprintf("[SPK] FATAL: frame_bytes=%u > NV limit=%d, cannot persist!\n",
-                (unsigned)SPK_FRAME_BYTES, SPK_NV_ITEM_LIMIT);
+    if (n_frames <= 0 || n_frames > SPK_MAX_TEMPLATE_FRAMES) {
+        mprintf("[SPK] tpl_save bad n_frames=%d\n", n_frames);
         return -1;
     }
 
-    /* 先写帧块，全部成功后再写 meta，避免 meta 有效但块缺失 */
-    int ok = 1;
-    for (int i = 0; i < n_frames; i++) {
-        if (!nv_write_checked(NVDATA_ID_SPK_CHUNK_BASE + (uint32_t)i,
-                              SPK_FRAME_BYTES, (void *)feats[i])) {
-            mprintf("[SPK] tpl save FAILED at frame %d (NV full?)\n", i);
-            ok = 0;
-            break;
+    /* 先清掉旧模板, 避免多次注册残留占满NV */
+    spk_tpl_delete();
+
+    uint16_t flen = (uint16_t)(SPK_FEAT_DIM * sizeof(float));   /* 156 */
+
+    /* 1. 逐帧写入 */
+    for (int f = 0; f < n_frames; f++) {
+        if (nv_put(NVDATA_ID_SPK_CHUNK_BASE + (uint32_t)f, flen, feats[f]) != 0) {
+            mprintf("[SPK] tpl save FAILED at frame %d\n", f);
+            return -1;
         }
     }
-    if (!ok) return -1;
 
-    tpl_meta_t meta = { TPL_MAGIC, (int32_t)n_frames };
-    if (!nv_write_checked(NVDATA_ID_SPK_TEMPLATE_META, sizeof(meta), &meta)) {
-        mprintf("[SPK] tpl meta save FAILED\n");
+    /* 2. 最后写meta作为提交标记(写在最后, 中途掉电则meta无效->自动重注册) */
+    tpl_meta_t meta = { TPL_MAGIC, n_frames, SPK_FEAT_DIM };
+    if (nv_put(NVDATA_ID_SPK_TEMPLATE_META, sizeof(meta), &meta) != 0) {
+        mprintf("[SPK] tpl save FAILED at meta\n");
         return -1;
     }
 
-    mprintf("[SPK] tpl saved OK: %d frames x %u bytes\n",
-            n_frames, (unsigned)SPK_FRAME_BYTES);
+    mprintf("[SPK] tpl saved OK: %d frames x %d bytes (total %d)\n",
+            n_frames, (int)flen, n_frames * (int)flen);
     return 0;
 }
 
@@ -67,22 +66,20 @@ int spk_tpl_load(float feats[][SPK_FEAT_DIM], int *n_frames_out)
     if (cinv_item_read(NVDATA_ID_SPK_TEMPLATE_META, sizeof(meta), &meta, &rlen)
             != CINV_OPER_SUCCESS)
         return -1;
-    if (meta.magic != TPL_MAGIC || meta.n_frames <= 0)
+    if (meta.magic != TPL_MAGIC || meta.n_frames <= 0 ||
+        meta.n_frames > SPK_MAX_TEMPLATE_FRAMES || meta.feat_dim != SPK_FEAT_DIM)
         return -1;
 
-    int n = (meta.n_frames <= SPK_MAX_TEMPLATE_FRAMES)
-            ? meta.n_frames : SPK_MAX_TEMPLATE_FRAMES;
-
-    for (int i = 0; i < n; i++) {
-        if (cinv_item_read(NVDATA_ID_SPK_CHUNK_BASE + (uint32_t)i,
-                           SPK_FRAME_BYTES, feats[i], &rlen) != CINV_OPER_SUCCESS) {
-            mprintf("[SPK] tpl load: chunk %d missing\n", i);
+    uint16_t flen = (uint16_t)(SPK_FEAT_DIM * sizeof(float));
+    for (int f = 0; f < meta.n_frames; f++) {
+        if (cinv_item_read(NVDATA_ID_SPK_CHUNK_BASE + (uint32_t)f,
+                           flen, feats[f], &rlen) != CINV_OPER_SUCCESS) {
+            mprintf("[SPK] tpl load FAIL at frame %d\n", f);
             return -1;
         }
     }
-
-    *n_frames_out = n;
-    mprintf("[SPK] tpl loaded OK: %d frames\n", n);
+    *n_frames_out = meta.n_frames;
+    mprintf("[SPK] tpl loaded: %d frames\n", meta.n_frames);
     return 0;
 }
 
@@ -97,16 +94,9 @@ int spk_tpl_exists(void)
 
 int spk_tpl_delete(void)
 {
-    tpl_meta_t meta;
-    uint16_t   rlen = 0;
-    int n = 0;
-    if (cinv_item_read(NVDATA_ID_SPK_TEMPLATE_META, sizeof(meta), &meta, &rlen)
-            == CINV_OPER_SUCCESS && meta.magic == TPL_MAGIC)
-        n = (meta.n_frames <= SPK_MAX_TEMPLATE_FRAMES)
-            ? meta.n_frames : SPK_MAX_TEMPLATE_FRAMES;
-
     cinv_item_delete(NVDATA_ID_SPK_TEMPLATE_META);
-    for (int i = 0; i < n; i++)
-        cinv_item_delete(NVDATA_ID_SPK_CHUNK_BASE + (uint32_t)i);
+    cinv_item_delete(NVDATA_ID_SPK_TEMPLATE);   /* 旧整模板ID(若存在) */
+    for (uint32_t f = 0; f < SPK_MAX_TEMPLATE_FRAMES; f++)
+        cinv_item_delete(NVDATA_ID_SPK_CHUNK_BASE + f);   /* 删不存在的item无害 */
     return 0;
 }
