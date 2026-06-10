@@ -63,12 +63,19 @@ extern void pause_voice_in(void);
 
 static volatile int s_door_open = 0;
 
+/* "请再说一次"播完后清空采集缓冲, 让下一句录入不含喇叭声 */
+static void enroll_play_done_cb(cmd_handle_t cmd_handle)
+{
+    spk_flush_ring();
+    default_play_done_callback(cmd_handle);
+}
+
 static void spk_enroll_callback(spk_enroll_state_t state, int cur, int total)
 {
     if (state == SPK_ENROLL_STATE_RECORDING) {
         mprintf("[SPK] enrolled %d/%d - say cmd word again\n", cur, total);
         pause_voice_in();
-        prompt_play_by_cmd_id(13, -1, default_play_done_callback, true);
+        prompt_play_by_cmd_id(13, -1, enroll_play_done_cb, true);   /* 播完flush */
     } else if (state == SPK_ENROLL_STATE_DONE) {
         mprintf("[SPK] enrollment complete!\n");
         pause_voice_in();
@@ -79,7 +86,6 @@ static void spk_enroll_callback(spk_enroll_state_t state, int cur, int total)
         prompt_play_by_cmd_id(17, -1, default_play_done_callback, true);
     }
 }
-
 static void spk_door_close_task(void *p)
 {
     (void)p;

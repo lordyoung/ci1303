@@ -39,4 +39,7 @@ void spk_feed_pcm(const short *pcm, int n);
 /* Called from asr_result_callback — slices the captured PCM, signals the task */
 int spk_process(int n_asr_frames);
 
+/* 提示音播完后调用, 清空采集缓冲, 防止喇叭声被采进模板 */
+void spk_flush_ring(void);
+
 #endif

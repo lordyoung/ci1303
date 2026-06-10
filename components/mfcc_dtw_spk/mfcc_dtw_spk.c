@@ -298,6 +298,7 @@ int spk_start_enroll(spk_enroll_cb_t enroll_cb)
     s_enroll_cb       = enroll_cb;
     s_enroll_cnt      = 0;
     s_template_frames = 0;
+    s_ring_count      = 0;   /* ← 新增: 清掉触发注册前的残留音频(含喇叭声) */
     s_state           = SPK_ST_ENROLL;
     mprintf("[SPK] enroll started - say cmd word %d times\n", SPK_ENROLL_TIMES);
     return 0;
@@ -350,4 +351,12 @@ int spk_process(int n_asr_frames)
         return -1;
     }
     return 0;
+}
+
+/* 提示音播放完成后调用: 丢弃缓冲内已有音频(含喇叭声),
+ * 使下一次 spk_process 抓取时只见到用户的新语音。 */
+void spk_flush_ring(void)
+{
+    s_ring_count = 0;
+    mprintf("[SPK] ring flushed\n");
 }
