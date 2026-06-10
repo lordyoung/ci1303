@@ -416,7 +416,9 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 /* 唤醒后补偿延迟(ms): 吸收CI1306降噪+IIS链路延迟,等完整唤醒词写入ring再回溯取数。
  * 步骤4标定: feat_frames过小则加大,从60起步。仅双芯片模式生效。 */
 #define SPK_DUAL_CHIP_LATENCY_MS    60
-#define SPK_CAPTURE_GUARD_MS        120
+/* 提示音播完后额外丢弃的余量(ms): 叠加在 SPK_DUAL_CHIP_LATENCY_MS 之上,
+ * 吸收降噪算法 ring-down 和延迟标定误差。尾部丢弃总时长 = LATENCY + 此值 */
+#define SPK_CAPTURE_TAIL_MARGIN_MS  40
 #define SPK_ENROLL_TIMES            3
 #define SPK_ENROLL_MIN_ENERGY       50   /*  平均绝对幅值，拒绝过轻声注册 */
 #define SPK_ENROLL_MIN_FRAMES       15    /* 特征帧下限，约150ms，拒绝截断 */
