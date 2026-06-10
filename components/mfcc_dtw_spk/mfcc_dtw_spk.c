@@ -187,11 +187,23 @@ static void vad_trim(const short *pcm, int n, int *p_start, int *p_len)
 
 static void process_utterance(int n_pcm_samples)
 {
-    /* 0. VAD: 裁掉首尾静音, 消除阵风静音残差对CMN/DTW的污染 */
-    int v_start = 0, v_len = n_pcm_samples;
-    vad_trim(s_pcm_copy, n_pcm_samples, &v_start, &v_len);
+
+        /* 0. 端点检测: 从末尾逆向定位"最近一句话", 切掉头部残留(提示音尾音等)。
+     * 提示音残留和人声走同一条CI1306管道、延迟相同, 二者间的静音间隔
+     * 被原样保留; 只要开口前有>96ms间隔, 头部残留就能被切干净。 */
+    int v_start = 0;
+    int v_len = spk_endpoint(s_pcm_copy, n_pcm_samples, &v_start);
     if (v_len < SPK_FRAME_LEN) { v_start = 0; v_len = n_pcm_samples; }
-    mprintf("[SPK] vad: total=%d voiced=%d start=%d\n", n_pcm_samples, v_len, v_start);
+    mprintf("[SPK] ep: total=%d voiced=%d start=%d\n", n_pcm_samples, v_len, v_start);
+
+    /* 注册时要求开头有干净静音: start=0 说明残留未排空或字头被截断,
+     * 该遍作废、播"请再说一次"重录, 不让坏数据进模板 */
+    if (s_state == SPK_ST_ENROLL && v_start == 0) {
+        mprintf("[SPK] enroll head not clean -> retry\n");
+        if (s_enroll_cb)
+            s_enroll_cb(SPK_ENROLL_STATE_RECORDING, s_enroll_cnt, SPK_ENROLL_TIMES);
+        return;
+    }
 
     /* 1. MFCC (仅语音段) */
     int n_feat = feat_extract_mfcc(s_pcm_copy + v_start, v_len,
@@ -226,6 +238,21 @@ static void process_utterance(int n_pcm_samples)
             }
         }
 
+                /* 一致性校验: 第2/3遍先与已累计模板比DTW, 差异过大判为被污染/说错,
+         * 该遍作废重说, 保证只有彼此相似的干净语音进入模板 */
+        if (s_enroll_cnt > 0) {
+            int xd = dtw_match((const float *)s_feat_buf, n_feat,
+                               (const float *)s_template, s_template_frames,
+                               SPK_FEAT_DIM, SPK_DTW_BAND_RATIO_X100);
+            mprintf("[SPK] enroll xcheck dist*1000=%d limit=%d\n",
+                    xd, SPK_ENROLL_XCHECK_X1000);
+            if (xd < 0 || xd > SPK_ENROLL_XCHECK_X1000) {
+                mprintf("[SPK] take inconsistent -> retry\n");
+                if (s_enroll_cb)
+                    s_enroll_cb(SPK_ENROLL_STATE_RECORDING, s_enroll_cnt, SPK_ENROLL_TIMES);
+                return;
+            }
+        }
         
         /* Running average into s_template */
         if (s_enroll_cnt == 0) {

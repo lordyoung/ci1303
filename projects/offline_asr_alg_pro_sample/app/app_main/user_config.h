@@ -419,6 +419,9 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 /* 提示音播完后额外丢弃的余量(ms): 叠加在 SPK_DUAL_CHIP_LATENCY_MS 之上,
  * 吸收降噪算法 ring-down 和延迟标定误差。尾部丢弃总时长 = LATENCY + 此值 */
 #define SPK_CAPTURE_TAIL_MARGIN_MS  40
+/* 注册一致性门限: 第2/3遍与已累计模板的DTW距离上限, 超过则该遍作废重说。
+ * 应明显大于本人正常复述差异(100-200), 建议范围300-400 */
+#define SPK_ENROLL_XCHECK_X1000     350
 #define SPK_ENROLL_TIMES            3
 #define SPK_ENROLL_MIN_ENERGY       50   /*  平均绝对幅值，拒绝过轻声注册 */
 #define SPK_ENROLL_MIN_FRAMES       15    /* 特征帧下限，约150ms，拒绝截断 */
