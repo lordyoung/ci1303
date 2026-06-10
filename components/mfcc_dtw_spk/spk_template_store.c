@@ -9,7 +9,7 @@
 /* CINV_DATA_ITEM_MAX_LEN = 240 (USE_VPR=0: IO buf 256 - 16字节item头 = 240)
  * 编译期自适应: dim=60 -> 2帧/条目(240B); dim=39 -> 3帧/条目(234B) */
 #define NV_MAX_ITEM_BYTES  240u
-#define INT16_FRAME_BYTES  ((unsigned)(SPK_FEAT_DIM * sizeof(int16_t)))
+#define INT16_FRAME_BYTES  (SPK_FEAT_DIM * 2u)
 #define FRAMES_PER_ITEM    (NV_MAX_ITEM_BYTES / INT16_FRAME_BYTES)
 
 #if (FRAMES_PER_ITEM < 1)
