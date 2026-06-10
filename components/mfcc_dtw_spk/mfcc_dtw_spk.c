@@ -32,6 +32,10 @@ static volatile uint32_t s_ring_count = 0;    /* total samples buffered, saturat
 static int               s_frm_shift  = 160;  /* ASR FE frame shift in samples             */
 static int               s_feed_dbg   = 0;
 
+/* 喇叭播放门控: 播放中及播完尾音保护期内丢弃采集 */
+extern uint32_t prompt_is_playing(void);
+static volatile uint32_t s_capture_resume_tick = 0;
+
 /* ── state ─────────────────────────────────────────────────────────────────── */
 
 static spk_state_t     s_state           = SPK_ST_IDLE;
@@ -47,6 +51,24 @@ void spk_feed_pcm(const short *pcm, int n)
 {
     if (!pcm || n <= 0 || s_state == SPK_ST_IDLE)
         return;
+
+        /* 喇叭正在播提示音: 丢弃本帧, 并把"恢复时刻"持续往后推,
+     * 覆盖 CI1306 降噪 + 声学链路的尾音延迟, 同时清掉已缓存的喇叭声 */
+    if (prompt_is_playing()) {
+        s_capture_resume_tick = xTaskGetTickCount() + pdMS_TO_TICKS(SPK_CAPTURE_GUARD_MS);
+        s_ring_w = 0;
+        s_ring_count = 0;
+        return;
+    }
+    /* 提示音刚停的尾音保护期: 继续丢弃, 等管道里残留的喇叭声排空 */
+    if (s_capture_resume_tick != 0) {
+        if (xTaskGetTickCount() < s_capture_resume_tick) {
+            s_ring_w = 0;
+            s_ring_count = 0;
+            return;
+        }
+        s_capture_resume_tick = 0;   /* 保护期结束, 开始采集干净语音 */
+    }
 
     if (s_feed_dbg < 5) {
         mprintf("[SPK] feed pcm addr=0x%x n=%d\n",

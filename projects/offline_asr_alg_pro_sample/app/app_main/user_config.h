@@ -416,6 +416,7 @@ chipintelli提供的部分开发板和模组，可以通过下面的宏选择，
 /* 唤醒后补偿延迟(ms): 吸收CI1306降噪+IIS链路延迟,等完整唤醒词写入ring再回溯取数。
  * 步骤4标定: feat_frames过小则加大,从60起步。仅双芯片模式生效。 */
 #define SPK_DUAL_CHIP_LATENCY_MS    60
+#define SPK_CAPTURE_GUARD_MS        120
 #define SPK_ENROLL_TIMES            3
 #define SPK_ENROLL_MIN_ENERGY       50   /*  平均绝对幅值，拒绝过轻声注册 */
 #define SPK_ENROLL_MIN_FRAMES       15    /* 特征帧下限，约150ms，拒绝截断 */
