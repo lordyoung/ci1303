@@ -55,19 +55,29 @@
 #include "cias_record_demo.h"
 #if USE_MFCC_DTW_SPK
 #include "mfcc_dtw_spk.h"
+#include "prompt_player.h"
 #include "servo.h"
 #include "ci130x_gpio.h"
+
+extern void pause_voice_in(void);
 
 static volatile int s_door_open = 0;
 
 static void spk_enroll_callback(spk_enroll_state_t state, int cur, int total)
 {
-    if (state == SPK_ENROLL_STATE_RECORDING)
+    if (state == SPK_ENROLL_STATE_RECORDING) {
         mprintf("[SPK] enrolled %d/%d - say cmd word again\n", cur, total);
-    else if (state == SPK_ENROLL_STATE_DONE)
+        pause_voice_in();
+        prompt_play_by_cmd_id(13, -1, default_play_done_callback, true);
+    } else if (state == SPK_ENROLL_STATE_DONE) {
         mprintf("[SPK] enrollment complete!\n");
-    else
+        pause_voice_in();
+        prompt_play_by_cmd_id(12, -1, default_play_done_callback, true);
+    } else if (state == SPK_ENROLL_STATE_FAILED) {
         mprintf("[SPK] enrollment failed\n");
+        pause_voice_in();
+        prompt_play_by_cmd_id(17, -1, default_play_done_callback, true);
+    }
 }
 
 static void spk_door_close_task(void *p)
