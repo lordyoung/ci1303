@@ -10,9 +10,9 @@
 #define SERVO_PWM_PAD       PA4             /* 舵机信号脚 = PA4 */
 #define SERVO_PWM_PAD_FUNC  FIFTH_FUNCTION  /* PA4 第5功能=PWM2 (查ci130x_scu.h引脚表) */
 
-#define SERVO_ANGLE_A       0               /* "小屁锁车" 触发角度 */
+#define SERVO_ANGLE_A       1               /* "小屁锁车" 触发角度 */
 #define SERVO_ANGLE_B       90              /* "小屁开门" 声纹通过后角度 */
-#define SERVO_ANGLE_REST    45              /* 复位/开机角度 */
+#define SERVO_ANGLE_REST    46              /* 复位/开机角度 */
 #define SERVO_HOLD_MS       300             /* 触发后保持时间(ms), 之后回到REST */
 
 #define SERVO_CMD_OPEN_DOOR 1
