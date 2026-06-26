@@ -15649,10 +15649,10 @@ Disassembly of section .text:
 1ff5c5e0:	c895                	beqz	s1,1ff5c614 <spk_verify_callback+0x64>
 1ff5c5e2:	1ff66537          	lui	a0,0x1ff66
 1ff5c5e6:	12c00613          	li	a2,300
-1ff5c5ea:	05a00593          	li	a1,90
+1ff5c5ea:	05000593          	li	a1,80
 1ff5c5ee:	79450513          	addi	a0,a0,1940 # 1ff66794 <__func__.5642+0x248>
 1ff5c5f2:	91dff0ef          	jal	ra,1ff5bf0e <_printf>
-1ff5c5f6:	05a00513          	li	a0,90
+1ff5c5f6:	05000513          	li	a0,80
 1ff5c5fa:	e39ff0ef          	jal	ra,1ff5c432 <servo_pulse_to>
 1ff5c5fe:	1ff67537          	lui	a0,0x1ff67
 1ff5c602:	4581                	li	a1,0
@@ -19084,9 +19084,9 @@ Disassembly of section .text:
 1ff5ee2a:	dacfd0ef          	jal	ra,1ff5c3d6 <servo_apply_angle>
 1ff5ee2e:	09600513          	li	a0,150
 1ff5ee32:	fb3ff0ef          	jal	ra,1ff5ede4 <vTaskDelay>
-1ff5ee36:	02e00513          	li	a0,46
+1ff5ee36:	03700513          	li	a0,55
 1ff5ee3a:	d9cfd0ef          	jal	ra,1ff5c3d6 <servo_apply_angle>
-1ff5ee3e:	02e00613          	li	a2,46
+1ff5ee3e:	03700613          	li	a2,55
 1ff5ee42:	12c00593          	li	a1,300
 1ff5ee46:	cbc40513          	addi	a0,s0,-836 # 1ff66cbc <__func__.5642+0x770>
 1ff5ee4a:	8c4fd0ef          	jal	ra,1ff5bf0e <_printf>
@@ -20978,7 +20978,7 @@ Disassembly of section .text:
 1ff60648:	c398                	sw	a4,0(a5)
 1ff6064a:	43d8                	lw	a4,4(a5)
 1ff6064c:	03200693          	li	a3,50
-1ff60650:	02e00513          	li	a0,46
+1ff60650:	03700513          	li	a0,55
 1ff60654:	00876713          	ori	a4,a4,8
 1ff60658:	c3d8                	sw	a4,4(a5)
 1ff6065a:	1ff51737          	lui	a4,0x1ff51
@@ -21018,7 +21018,7 @@ Disassembly of section .text:
 1ff606c0:	e0c50513          	addi	a0,a0,-500 # 1ff5ee0c <servo_task>
 1ff606c4:	e05f40ef          	jal	ra,1ff554c8 <xTaskCreate.constprop.0>
 1ff606c8:	1ff67537          	lui	a0,0x1ff67
-1ff606cc:	02e00693          	li	a3,46
+1ff606cc:	03700693          	li	a3,55
 1ff606d0:	4611                	li	a2,4
 1ff606d2:	400165b7          	lui	a1,0x40016
 1ff606d6:	2f850513          	addi	a0,a0,760 # 1ff672f8 <__func__.5642+0xdac>
@@ -21236,11 +21236,11 @@ Disassembly of section .text:
 1ff60970:	8f450513          	addi	a0,a0,-1804 # 1ff668f4 <__func__.5642+0x3a8>
 1ff60974:	d201a223          	sw	zero,-732(gp) # 1ff687ac <s_pending_door>
 1ff60978:	d96fb0ef          	jal	ra,1ff5bf0e <_printf>
-1ff6097c:	4505                	li	a0,1
+1ff6097c:	4551                	li	a0,20
 1ff6097e:	ab5fb0ef          	jal	ra,1ff5c432 <servo_pulse_to>
 1ff60982:	1ff67537          	lui	a0,0x1ff67
 1ff60986:	12c00613          	li	a2,300
-1ff6098a:	4585                	li	a1,1
+1ff6098a:	45d1                	li	a1,20
 1ff6098c:	41850513          	addi	a0,a0,1048 # 1ff67418 <__func__.5642+0xecc>
 1ff60990:	d7efb0ef          	jal	ra,1ff5bf0e <_printf>
 1ff60994:	404c                	lw	a1,4(s0)
